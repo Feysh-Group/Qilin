@@ -255,4 +255,15 @@ public abstract class PTA implements PointsToAnalysis {
         PointsToSet pts2 = reachingObjects(l2).toCIPointsToSet();
         return pts1.hasNonEmptyIntersection(pts2);
     }
+
+    @Override
+    public soot.PointsToSet reachingObjectsOfArrayElement(soot.PointsToSet pointsToSet) {
+        return this.reachingObjectsOfArrayElement((PointsToSet)pointsToSet);
+    }
+
+
+    @Override
+    public soot.PointsToSet reachingObjects(soot.PointsToSet pointsToSet, SootField sootField) {
+        return this.reachingObjects((PointsToSet)pointsToSet, sootField);
+    }
 }

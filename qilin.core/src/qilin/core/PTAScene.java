@@ -26,6 +26,7 @@ import soot.util.Chain;
 import soot.util.IterableNumberer;
 import soot.util.StringNumberer;
 
+import java.util.List;
 import java.util.Set;
 
 public class PTAScene {
@@ -107,6 +108,9 @@ public class PTAScene {
         return sootScene.getOrMakeFastHierarchy();
     }
 
+    public List<SootMethod> getEntryPoints() {
+        return Scene.v().getEntryPoints();
+    }
     public SootClass loadClassAndSupport(String className) {
         return sootScene.loadClassAndSupport(className);
     }

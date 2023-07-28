@@ -36,6 +36,7 @@ import soot.util.queue.ChunkedQueue;
 import soot.util.queue.QueueReader;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class CallGraphBuilder {
     protected final Map<VarNode, Collection<VirtualCallSite>> receiverToSites;
@@ -107,10 +108,7 @@ public class CallGraphBuilder {
     }
 
     public List<MethodOrMethodContext> getEntryPoints() {
-        Node thisRef = pag.getMethodPAG(PTAScene.v().getFakeMainMethod()).nodeFactory().caseThis();
-        thisRef = pta.parameterize(thisRef, pta.emptyContext());
-        pag.addEdge(pta.getRootNode(), thisRef);
-        return Collections.singletonList(pta.parameterize(PTAScene.v().getFakeMainMethod(), pta.emptyContext()));
+        return PTAScene.v().getEntryPoints().stream().map(x -> pta.parameterize(x, pta.emptyContext())).collect(Collectors.toList());
     }
 
     public void initReachableMethods() {
@@ -153,10 +151,11 @@ public class CallGraphBuilder {
     public void injectCallEdge(Object heapOrType, MethodOrMethodContext callee, Kind kind) {
         Map<Object, Stmt> stmtMap = methodToInvokeStmt.computeIfAbsent(callee.method(), k -> DataFactory.createMap());
         if (!stmtMap.containsKey(heapOrType)) {
+            SootMethod rm = PTAScene.v().getMethod("<java.lang.ClassLoader: java.lang.Class loadClass(java.lang.String)>");
             InvokeExpr ie = new JStaticInvokeExpr(callee.method().makeRef(), Collections.emptyList());
             JInvokeStmt stmt = new JInvokeStmt(ie);
             stmtMap.put(heapOrType, stmt);
-            handleCallEdge(new Edge(pta.parameterize(PTAScene.v().getFakeMainMethod(), pta.emptyContext()), stmtMap.get(heapOrType), callee, kind));
+            handleCallEdge(new Edge(pta.parameterize(rm, pta.emptyContext()), stmtMap.get(heapOrType), callee, kind));
         }
     }
 

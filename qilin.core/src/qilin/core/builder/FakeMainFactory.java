@@ -142,7 +142,7 @@ public class FakeMainFactory extends ArtificialMethod {
         addInvoke(defaultClassLoader, "<java.lang.ClassLoader: void <init>()>");
         Value vClass = getNextLocal(RefType.v("java.lang.Class"));
         Value vDomain = getNextLocal(RefType.v("java.security.ProtectionDomain"));
-        addInvoke(defaultClassLoader, "<java.lang.ClassLoader: java.lang.Class loadClassInternal(java.lang.String)>", sv);
+        addInvoke(defaultClassLoader, "<java.lang.ClassLoader: java.lang.Class loadClass(java.lang.String)>", sv);
         addInvoke(defaultClassLoader, "<java.lang.ClassLoader: void checkPackageAccess(java.lang.Class,java.security.ProtectionDomain)>", vClass, vDomain);
         addInvoke(defaultClassLoader, "<java.lang.ClassLoader: void addClass(java.lang.Class)>", vClass);
 
