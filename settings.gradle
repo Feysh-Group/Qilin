@@ -1,3 +1,9 @@
+pluginManagement {
+    repositories {
+        maven { url "https://maven.aliyun.com/repository/gradle-plugin" }
+        gradlePluginPortal()
+    }
+}
 rootProject.name = 'Qilin'
 include 'qilin.util'
 include 'qilin.core'

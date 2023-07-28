@@ -1,0 +1,6 @@
+deploy:
+  image: harbor.feysh.local/corax/gradle:v1
+  tags:
+    - "k8s-runner"
+  script:
+    - gradle publish
