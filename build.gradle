@@ -20,6 +20,8 @@ java {
 }
 
 repositories {
+    mavenLocal()
+    maven { url "https://maven.aliyun.com/repository/central" }
     mavenCentral()
 }
 
@@ -83,7 +85,7 @@ subprojects {
 
     publishing.repositories {
         maven {
-            url = "http://gitlab.feysh.local/api/v4/projects/256/packages/maven"
+            url "http://gitlab.feysh.local/api/v4/projects/376/packages/maven"
             credentials(HttpHeaderCredentials) {
                 name = "Deploy-Token"
                 value = "QzCDrcu9zWMoFsKHxbaR"
