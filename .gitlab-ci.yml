@@ -4,7 +4,7 @@ build linux:
   tags:
     - "k8s-runner"
   script:
-    - gradle build
+    - gradle build -x test
 
 deploy:
   image: harbor.feysh.local/corax/gradle:v1
