@@ -15,7 +15,7 @@ version '0.9.2-CORAX-FORK'
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(16)
+        languageVersion = JavaLanguageVersion.of(17)
     }
 }
 
@@ -70,8 +70,7 @@ subprojects {
 
     java {
         toolchain {
-            languageVersion = JavaLanguageVersion.of(16)
-            vendor = JvmVendorSpec.ADOPTIUM
+            languageVersion = JavaLanguageVersion.of(17)
         }
     }
     publishing.publications {
