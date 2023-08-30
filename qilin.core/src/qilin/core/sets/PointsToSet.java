@@ -31,7 +31,7 @@ import java.util.Set;
  *
  * @author Ondrej Lhotak
  */
-public interface PointsToSet {
+public interface PointsToSet extends soot.PointsToSet {
     /**
      * Returns true if this set contains no run-time objects.
      */

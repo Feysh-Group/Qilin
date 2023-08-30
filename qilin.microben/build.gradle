@@ -8,13 +8,9 @@ version '1.0-SNAPSHOT'
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(8)
-        vendor = JvmVendorSpec.ADOPTIUM
     }
 }
 
-repositories {
-    mavenCentral()
-}
 sourceSets.main {
     java.srcDirs = ['src']
 }

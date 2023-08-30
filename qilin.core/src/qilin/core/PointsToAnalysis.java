@@ -30,7 +30,7 @@ import soot.SootField;
  * @author Ondrej Lhotak
  */
 
-public interface PointsToAnalysis {
+public interface PointsToAnalysis extends soot.PointsToAnalysis {
 
     int THIS_NODE = -1;
     int RETURN_NODE = -2;

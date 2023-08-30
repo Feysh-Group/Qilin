@@ -35,6 +35,7 @@ import soot.*;
 import soot.jimple.*;
 import soot.jimple.toolkits.callgraph.CallGraph;
 import soot.jimple.toolkits.callgraph.Edge;
+import soot.options.Options;
 import soot.util.NumberedString;
 import soot.util.dot.DotGraph;
 import soot.util.dot.DotGraphConstants;
@@ -248,7 +249,7 @@ public final class PTAUtils {
             return true;
         }
         SootClass cl = rt.getSootClass();
-        return cl.resolvingLevel() < SootClass.HIERARCHY;
+        return (!Options.v().ignore_resolving_levels()) && cl.resolvingLevel() < SootClass.HIERARCHY;
     }
 
     public static boolean castNeverFails(Type src, Type dst) {

@@ -44,6 +44,11 @@ public class UnmodifiablePointsToSet implements PointsToSet {
     }
 
     @Override
+    public boolean hasNonEmptyIntersection(soot.PointsToSet pointsToSet) {
+        return hasNonEmptyIntersection((PointsToSet)pointsToSet);
+    }
+
+    @Override
     public boolean contains(AllocNode n) {
         return pts.contains(n.getNumber());
     }
