@@ -165,7 +165,13 @@ public class MethodPAG {
     protected void addMiscEdges() {
         if (method.getSignature().equals("<java.lang.ref.Reference: void <init>(java.lang.Object,java.lang.ref.ReferenceQueue)>")) {
             // Implements the special status of java.lang.ref.Reference just as in Doop (library/reference.logic).
-            StaticFieldRef sfr = Jimple.v().newStaticFieldRef(RefType.v("java.lang.ref.Reference").getSootClass().getFieldByName("pending").makeRef());
+            var scReference = RefType.v("java.lang.ref.Reference").getSootClass();
+            var sfPending = scReference.getFieldByNameUnsafe("pending");
+            if (sfPending == null) {
+                // FIXME: This field does not exist in higher versions of jdk
+                sfPending = scReference.getOrAddField(new SootField("pending", scReference.getType(), Modifier.STATIC));
+            }
+            StaticFieldRef sfr = Jimple.v().newStaticFieldRef(sfPending.makeRef());
             addInternalEdge(nodeFactory.caseThis(), nodeFactory.getNode(sfr));
         }
     }
