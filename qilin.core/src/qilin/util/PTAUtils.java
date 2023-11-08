@@ -46,6 +46,7 @@ import soot.util.queue.QueueReader;
 import java.io.*;
 import java.net.URL;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 
@@ -761,7 +762,7 @@ public final class PTAUtils {
         return allocated;
     }
 
-    private static final Map<SootMethod, Body> methodToBody = DataFactory.createMap();
+    private static final ConcurrentHashMap<SootMethod, Body> methodToBody = new ConcurrentHashMap<>();
 
     public static Body getMethodBody(SootMethod m) {
         if (m.hasActiveBody()) return m.getActiveBody();
