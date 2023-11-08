@@ -246,9 +246,10 @@ public final class PTAUtils {
         }
         if (!(type instanceof RefType rt))
             return false;
-        if (!rt.hasSootClass()) {
-            return true;
-        }
+//        FIXED: ret true if type is WeakObjectType
+//        if (!rt.hasSootClass()) {
+//            return true;
+//        }
         SootClass cl = rt.getSootClass();
         return (!Options.v().ignore_resolving_levels()) && cl.resolvingLevel() < SootClass.HIERARCHY;
     }
