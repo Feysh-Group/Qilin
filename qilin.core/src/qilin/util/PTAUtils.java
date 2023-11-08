@@ -764,20 +764,32 @@ public final class PTAUtils {
     private static final Map<SootMethod, Body> methodToBody = DataFactory.createMap();
 
     public static Body getMethodBody(SootMethod m) {
+        if (m.hasActiveBody()) return m.getActiveBody();
         Body body = methodToBody.get(m);
-        if (body == null) {
-            synchronized (PTAUtils.class) {
-                if (body == null) {
-                    if (m.isConcrete()) {
-                        body = m.retrieveActiveBody();
-                    } else {
-                        body = new JimpleBody(m);
-                    }
-                    methodToBody.putIfAbsent(m, body);
-                }
-            }
+        if (body != null) {
+            return body;
         }
-        return body;
+        synchronized (PTAUtils.class) {
+            // recheck
+            if (m.hasActiveBody()) return m.getActiveBody();
+            body = methodToBody.get(m);
+            if (body != null) {
+                return body;
+            }
+            SootClass declaringClass = m.getDeclaringClass();
+            if (declaringClass != null && !declaringClass.isPhantomClass() && m.isConcrete() && m.getSource() != null) {
+                body = m.retrieveActiveBody();
+            }
+            if (body == null) {
+                body = new JimpleBody(m);
+            }
+            methodToBody.putIfAbsent(m, body);
+            return body;
+        }
+    }
+
+    public static void clear() {
+        methodToBody.clear();
     }
 
     public static boolean isEmptyArray(AllocNode heap) {
