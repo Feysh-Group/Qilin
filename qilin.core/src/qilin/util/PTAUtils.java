@@ -55,6 +55,7 @@ public final class PTAUtils {
     static final String output_dir = CoreConfig.v().getOutConfig().outDir;
     static Map<String, Node> nodes = new TreeMap<>();
     private static final RefType clRunnable = RefType.v("java.lang.Runnable");
+    private static boolean apponly = false;
 
     public static Map<LocalVarNode, Set<AllocNode>> calcStaticThisPTS(PTA pta) {
         Map<LocalVarNode, Set<AllocNode>> pts = new HashMap<>();
@@ -290,7 +291,7 @@ public final class PTAUtils {
             }
         } else {
             Type mType = site.recNode().getType();
-            VirtualCalls.v().resolve(type, mType, site.subSig(), container.method(), targetsQueue);
+            VirtualCalls.v().resolve(type, mType, null, site.subSig(), container.method(), targetsQueue, apponly);
         }
         return targets;
     }
@@ -863,5 +864,9 @@ public final class PTAUtils {
             }
         }
         return ret;
+    }
+
+    public static void setAppOnly(boolean bool) {
+        apponly = bool;
     }
 }
