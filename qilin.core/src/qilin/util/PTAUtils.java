@@ -860,6 +860,10 @@ public final class PTAUtils {
         for (SootClass sc : visit) {
             final SootMethod initStart = sc.getMethodUnsafe(Scene.v().getSubSigNumberer().findOrAdd("void <clinit>()"));
             if (initStart != null) {
+                if (!initStart.isStatic()) {
+                    logger.error("Invalid soot method: " + initStart.getSignature() + " that without static modifier!");
+                    initStart.setModifiers(initStart.getModifiers() | Modifier.STATIC);
+                }
                 ret.add(initStart);
             }
         }
