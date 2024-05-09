@@ -32,6 +32,7 @@ import qilin.core.sets.PointsToSet;
 import qilin.core.sets.PointsToSetInternal;
 import qilin.util.queue.UniqueQueue;
 import soot.*;
+import soot.dexpler.Util;
 import soot.jimple.*;
 import soot.jimple.toolkits.callgraph.CallGraph;
 import soot.jimple.toolkits.callgraph.Edge;
@@ -784,7 +785,11 @@ public final class PTAUtils {
                 body = m.retrieveActiveBody();
             }
             if (body == null) {
-                body = new JimpleBody(m);
+                JimpleBody jimpleBody = Jimple.v().newBody(m);
+                jimpleBody.insertIdentityStmts();
+                Util.emptyBody(jimpleBody);
+                body = jimpleBody;
+                // don't set active body
             }
             methodToBody.putIfAbsent(m, body);
             return body;
