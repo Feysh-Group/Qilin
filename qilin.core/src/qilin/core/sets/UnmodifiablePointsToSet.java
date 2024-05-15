@@ -19,10 +19,7 @@
 package qilin.core.sets;
 
 import qilin.core.PTA;
-import qilin.core.pag.AllocNode;
-import qilin.core.pag.ClassConstantNode;
-import qilin.core.pag.Node;
-import qilin.core.pag.StringConstantNode;
+import qilin.core.pag.*;
 import soot.RefType;
 import soot.Type;
 import soot.jimple.ClassConstant;
@@ -83,8 +80,12 @@ public class UnmodifiablePointsToSet implements PointsToSet {
         final Set<String> ret = new HashSet<>();
         return pts.forall(new P2SetVisitor(pta) {
             public void visit(Node n) {
-                if (n instanceof StringConstantNode) {
-                    ret.add(((StringConstantNode) n).getString());
+                Node node = n;
+                if (node instanceof AllocNode can) {
+                    node = can.base();
+                }
+                if (node instanceof StringConstantNode sn) {
+                    ret.add(sn.getString());
                 } else {
                     returnValue = true;
                 }
@@ -97,8 +98,12 @@ public class UnmodifiablePointsToSet implements PointsToSet {
         final Set<ClassConstant> ret = new HashSet<>();
         return pts.forall(new P2SetVisitor(pta) {
             public void visit(Node n) {
-                if (n instanceof ClassConstantNode) {
-                    ret.add(((ClassConstantNode) n).getClassConstant());
+                Node node = n;
+                if (node instanceof AllocNode can) {
+                    node = can.base();
+                }
+                if (node instanceof ClassConstantNode ccn) {
+                    ret.add(ccn.getClassConstant());
                 } else {
                     returnValue = true;
                 }

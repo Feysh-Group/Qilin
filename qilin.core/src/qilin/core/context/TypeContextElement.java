@@ -39,6 +39,7 @@ public class TypeContextElement implements ContextElement {
     public static TypeContextElement getTypeContextElement(AllocNode a) {
         SootMethod declaringMethod = a.getMethod();
         Type declType = RefType.v("java.lang.Object");
+        a = a.base();
         if (declaringMethod != null) {
             declType = declaringMethod.getDeclaringClass().getType();
         } else if (a instanceof ClassConstantNode) {
