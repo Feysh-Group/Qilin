@@ -18,6 +18,8 @@
 
 package qilin.core.builder;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import qilin.CoreConfig;
 import qilin.core.PTA;
 import qilin.core.PTAScene;
@@ -39,6 +41,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 public class CallGraphBuilder {
+    private static final Logger log = LoggerFactory.getLogger(CallGraphBuilder.class);
     protected final Map<VarNode, Collection<VirtualCallSite>> receiverToSites;
     protected final Map<SootMethod, Map<Object, Stmt>> methodToInvokeStmt;
     protected final Set<MethodOrMethodContext> reachMethods;
@@ -134,6 +137,14 @@ public class CallGraphBuilder {
                 if (!Scene.v().getFastHierarchy().canStoreType(type, calleeDeclType)) {
                     continue;
                 }
+            }
+            if (target.getParameterCount() != site.iie().getArgCount()) {
+                log.error("Parameter count is not equal. site: {} target: {} at container {}", site.iie(), target.getParameterCount(), site.container().method());
+                continue;
+            }
+            if (target.isStatic()) {
+                log.error("Target method is static in virtual invoke. site: {} target: {} at container {}", site.iie(), target, site.container().method());
+                continue;
             }
             addVirtualEdge(site.container(), site.getUnit(), target, site.kind(), receiverNode);
         }
