@@ -18,12 +18,13 @@
 
 package qilin.util;
 
+import kotlin.Lazy;
+import kotlin.LazyKt;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qilin.CoreConfig;
 import qilin.core.PTA;
 import qilin.core.PTAScene;
-import qilin.core.VirtualCalls;
 import qilin.core.builder.MethodNodeFactory;
 import qilin.core.context.ContextElement;
 import qilin.core.context.ContextElements;
@@ -36,8 +37,8 @@ import soot.dexpler.Util;
 import soot.jimple.*;
 import soot.jimple.toolkits.callgraph.CallGraph;
 import soot.jimple.toolkits.callgraph.Edge;
+import soot.jimple.toolkits.callgraph.VirtualCalls;
 import soot.options.Options;
-import soot.util.NumberedString;
 import soot.util.dot.DotGraph;
 import soot.util.dot.DotGraphConstants;
 import soot.util.dot.DotGraphNode;
@@ -53,10 +54,27 @@ import java.util.jar.JarFile;
 
 public final class PTAUtils {
     private static final Logger logger = LoggerFactory.getLogger(PTAUtils.class);
-    static final String output_dir = CoreConfig.v().getOutConfig().outDir;
     static Map<String, Node> nodes = new TreeMap<>();
-    private static final RefType clRunnable = RefType.v("java.lang.Runnable");
+    private static volatile RefType clRunnable = null;
     private static boolean apponly = false;
+
+    private static final ConcurrentHashMap<SootMethod, Body> methodToBody = new ConcurrentHashMap<>();
+
+    private static Lazy<SootMethodRef> sigFinalize = getSigFinalize();
+
+    public static String output_dir() {
+        return CoreConfig.v().getOutConfig().outDir;
+    }
+
+    static public Lazy<SootMethodRef> getSigFinalize() {
+        return LazyKt.lazy(() -> {
+            SootMethod finalize = Scene.v().grabMethod("<java.lang.Object: void finalize()>");
+            if (finalize != null) {
+                return finalize.makeRef();
+            }
+            return null;
+        });
+    }
 
     public static Map<LocalVarNode, Set<AllocNode>> calcStaticThisPTS(PTA pta) {
         Map<LocalVarNode, Set<AllocNode>> pts = new HashMap<>();
@@ -183,7 +201,7 @@ public final class PTAUtils {
 
         plotDotGraph(canvas, filename);
         try {
-            PrintWriter out = new PrintWriter(new File(output_dir, "callgraphnodes"));
+            PrintWriter out = new PrintWriter(new File(output_dir(), "callgraphnodes"));
             for (int i = 0; i < methodList.size(); i++)
                 out.println(i + ":" + methodList.get(i));
             out.close();
@@ -277,6 +295,16 @@ public final class PTAUtils {
     }
 
     public static QueueReader<SootMethod> dispatch(Type type, VirtualCallSite site) {
+        RefType clRunnable = PTAUtils.clRunnable;
+        if (clRunnable == null) {
+            synchronized (PTAUtils.class) {
+                clRunnable = PTAUtils.clRunnable;
+                if (clRunnable == null) {
+                    clRunnable = RefType.v("java.lang.Runnable");
+                    PTAUtils.clRunnable = clRunnable;
+                }
+            }
+        }
         final ChunkedQueue<SootMethod> targetsQueue = new ChunkedQueue<>();
         final QueueReader<SootMethod> targets = targetsQueue.reader();
         if (site.kind() == Kind.THREAD && !PTAScene.v().getOrMakeFastHierarchy().canStoreType(type, clRunnable)) {
@@ -284,7 +312,8 @@ public final class PTAUtils {
         }
         MethodOrMethodContext container = site.container();
         if (site.iie() instanceof SpecialInvokeExpr && site.kind() != Kind.THREAD) {
-            SootMethod target = VirtualCalls.v().resolveSpecial((SpecialInvokeExpr) site.iie(), site.subSig(), container.method());
+            SootMethod target = VirtualCalls.v().resolveSpecial(site.iie().getMethodRef(), container.method(), apponly);
+//            SootMethod target = qilin.core.VirtualCalls.v().resolveSpecial((SpecialInvokeExpr) site.iie(), site.subSig(), container.method(), apponly);
             // if the call target resides in a phantom class then
             // "target" will be null, simply do not add the target in that case
             if (target != null) {
@@ -292,7 +321,8 @@ public final class PTAUtils {
             }
         } else {
             Type mType = site.recNode().getType();
-            VirtualCalls.v().resolve(type, mType, null, site.subSig(), container.method(), targetsQueue, apponly);
+            VirtualCalls.v().resolve(type, mType, null, site.iie().getMethodRef(), container.method(), targetsQueue, apponly);
+//            qilin.core.VirtualCalls.v().resolve(type, mType, null, site.subSig(), container.method(), targetsQueue, apponly);
         }
         return targets;
     }
@@ -309,7 +339,7 @@ public final class PTAUtils {
      */
     public static void dumpPts(PTA pta, boolean appOnly) {
         try {
-            PrintWriter file = new PrintWriter(new File(output_dir, "pts.txt"));
+            PrintWriter file = new PrintWriter(new File(output_dir(), "pts.txt"));
             file.println("Points-to results:");
             for (final ValNode vn : pta.getPag().getValNodes()) {
                 if (!(vn instanceof VarNode)) {
@@ -467,7 +497,7 @@ public final class PTAUtils {
     }
 
     private static void plotDotGraph(DotGraph canvas, String filename) {
-        canvas.plot(output_dir + "/" + filename + ".dot");
+        canvas.plot(output_dir() + "/" + filename + ".dot");
     }
 
     private static DotGraph setDotGraph(String fileName) {
@@ -507,11 +537,12 @@ public final class PTAUtils {
 
     private static void dumpNodeNames(PrintWriter file) {
         nodes.forEach((l, n) -> file.println(l + n));
+        nodes.clear();
     }
 
     public static void dumpNodeNames(String fileName) {
         try {
-            PrintWriter out = new PrintWriter(new File(output_dir, fileName));
+            PrintWriter out = new PrintWriter(new File(output_dir(), fileName));
             dumpNodeNames(out);
             out.close();
         } catch (FileNotFoundException e) {
@@ -551,10 +582,9 @@ public final class PTAUtils {
     }
 
     public static boolean supportFinalize(AllocNode heap) {
-        NumberedString sigFinalize = PTAScene.v().getSubSigNumberer().findOrAdd("void finalize()");
         Type type = heap.getType();
-        if (type instanceof RefType refType && type != RefType.v("java.lang.Object")) {
-            SootMethod finalizeMethod = VirtualCalls.v().resolveNonSpecial(refType, sigFinalize);
+        if (type instanceof RefType refType && type != Scene.v().getObjectType()) {
+            SootMethod finalizeMethod = VirtualCalls.v().resolveNonSpecial(refType, sigFinalize.getValue(), apponly);
             if (finalizeMethod != null && finalizeMethod.toString().equals("<java.lang.Object: void finalize()>")) {
                 return false;
             }
@@ -765,7 +795,6 @@ public final class PTAUtils {
         return allocated;
     }
 
-    private static final ConcurrentHashMap<SootMethod, Body> methodToBody = new ConcurrentHashMap<>();
 
     public static Body getMethodBody(SootMethod m) {
         if (m.hasActiveBody()) return m.getActiveBody();
@@ -798,6 +827,9 @@ public final class PTAUtils {
 
     public static void clear() {
         methodToBody.clear();
+        clRunnable = null;
+        apponly = false;
+        sigFinalize = getSigFinalize();
     }
 
     public static boolean isEmptyArray(AllocNode heap) {

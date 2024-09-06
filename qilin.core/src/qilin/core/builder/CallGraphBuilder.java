@@ -139,7 +139,7 @@ public class CallGraphBuilder {
                 }
             }
             if (target.getParameterCount() != site.iie().getArgCount()) {
-                log.error("Parameter count is not equal. site: {} target: {} at container {}", site.iie(), target.getParameterCount(), site.container().method());
+                log.error("Parameter count is not equal. site: {} target: {} at container {}", site.iie(), target, site.container().method());
                 continue;
             }
             if (target.isStatic()) {
