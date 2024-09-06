@@ -1,22 +1,18 @@
 plugins {
     id 'java-library'
+    id "org.jetbrains.kotlin.jvm" version "2.0.20"
 }
 
-sourceSets.main {
-    java.srcDirs = ['src']
-}
 
-repositories {
-    maven { url "https://repo1.maven.org/maven2/" }
-    flatDir {
-        dirs 'libs'
-    }
-}
 
 dependencies {
 //    api files("${rootDir}/libs/sootclasses-trunk-jar-with-dependencies.jar")
-    api files("${rootDir}/libs/sootclasses-4.2.1-jar-with-dependencies.jar")
+    api(sootVersion) {
+        exclude group:'com.google.guava', module:'guava'
+    }
 //    implementation 'org.soot-oss:soot:4.3.0'
+    implementation group: 'com.google.guava', name: 'guava', version: guavaVersion
+    implementation group: 'com.github.ben-manes.caffeine', name: 'caffeine', version: caffeineVersion
     api (project(':qilin.util'))
 }
 
