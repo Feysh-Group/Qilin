@@ -22,9 +22,11 @@ import qilin.CoreConfig;
 import qilin.core.PTA;
 import qilin.core.builder.MethodNodeFactory;
 import qilin.core.pag.*;
+import qilin.core.sets.ExpectedSize;
 import qilin.core.sets.PointsToSet;
 import qilin.util.PTAUtils;
 import soot.*;
+import soot.util.ArraySet;
 
 import java.util.*;
 
@@ -90,7 +92,7 @@ public class PointsToStat implements AbstractStat {
     );
 
     protected Set<Object> getPointsToNewExpr(PointsToSet pts) {
-        final Set<Object> allocSites = new HashSet<>();
+        final Set<Object> allocSites = new HashSet<>(ExpectedSize.capacity(pts.size()));
         for (Iterator<AllocNode> it = pts.iterator(); it.hasNext(); ) {
             AllocNode n = it.next();
             allocSites.add(n.getNewExpr());

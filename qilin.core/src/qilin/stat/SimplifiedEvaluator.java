@@ -18,10 +18,15 @@
 
 package qilin.stat;
 
+import com.google.common.collect.Sets;
+import com.google.common.util.concurrent.AtomicDouble;
+import qilin.CoreConfig;
 import qilin.core.PTA;
+import qilin.core.PTAScene;
 import qilin.core.builder.FakeMainFactory;
 import qilin.core.builder.MethodNodeFactory;
 import qilin.core.pag.*;
+import qilin.core.sets.ExpectedSize;
 import qilin.core.sets.PointsToSet;
 import qilin.util.PTAUtils;
 import qilin.util.Stopwatch;
@@ -29,8 +34,11 @@ import soot.*;
 import soot.jimple.*;
 import soot.jimple.toolkits.callgraph.CallGraph;
 import soot.jimple.toolkits.callgraph.Edge;
+import soot.util.ArraySet;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class SimplifiedEvaluator implements IEvaluator {
     protected final PTA pta;
@@ -108,17 +116,19 @@ public class SimplifiedEvaluator implements IEvaluator {
                 }
             }
         }
-        AliasStat aliasStat = new AliasStat(pta);
-        aliasStat.aliasesProcessing();
         exporter.collectMetric("#May Fail Cast (Total):", String.valueOf(totalCastsMayFail));
         exporter.collectMetric("#Virtual Call Site(Polymorphic):", String.valueOf(totalPolyCalls));
-        exporter.collectMetric("#globalAlias_incstst:", String.valueOf(aliasStat.getGlobalAliasesIncludingStSt()));
-        ptsStat();
+        if (CoreConfig.v().getPtaConfig().printAliasInfo) {
+            AliasStat aliasStat = new AliasStat(pta);
+            aliasStat.aliasesProcessing();
+            exporter.collectMetric("#globalAlias_incstst:", String.valueOf(aliasStat.getGlobalAliasesIncludingStSt()));
+            ptsStat();
+        }
     }
 
     private void ptsStat() {
-        int ptsCntNoNative = 0;
-        int varCntNoNative = 0;
+        AtomicDouble ptsCntNoNative = new AtomicDouble(0);
+        AtomicInteger varCntNoNative = new AtomicInteger(0);
         PAG pag = pta.getPag();
         // locals exclude Exceptions
         for (Local local : pag.getLocalPointers()) {
@@ -147,26 +157,27 @@ public class SimplifiedEvaluator implements IEvaluator {
                 }
             }
         }
-        Set<LocalVarNode> tmp = new HashSet<>();
-        for (LocalVarNode lvn : mLocalVarNodes) {
-            SootMethod sm = lvn.getMethod();
-            if (PTAUtils.isFakeMainMethod(sm)) {
-                tmp.add(lvn);
-                continue;
-            }
-            final Set<Object> callocSites = getPointsToNewExpr(pta.reachingObjects(lvn));
-            if (callocSites.size() > 0) {
-                if (!handledNatives.contains(sm.toString())) {
-                    ptsCntNoNative += callocSites.size();
-                    varCntNoNative++;
+        Set<LocalVarNode> tmp = Collections.newSetFromMap(new ConcurrentHashMap<>(ExpectedSize.capacity(mLocalVarNodes.size() / 10)));
+        mLocalVarNodes.parallelStream().forEach( (lvn) -> {
+                SootMethod sm = lvn.getMethod();
+                if (PTAUtils.isFakeMainMethod(sm)) {
+                    tmp.add(lvn);
+                    return;
                 }
-            } else {
-                tmp.add(lvn);
+                final Set<Object> callocSites = getPointsToNewExpr(pta.reachingObjects(lvn));
+                if (!callocSites.isEmpty()) {
+                    if (!handledNatives.contains(sm.toString())) {
+                        ptsCntNoNative.addAndGet(callocSites.size());
+                        varCntNoNative.incrementAndGet();
+                    }
+                } else {
+                    tmp.add(lvn);
+                }
             }
-        }
+        );
         mLocalVarNodes.removeAll(tmp);
 
-        exporter.collectMetric("#Avg Points-to Target without Native Var(CI):", String.valueOf(((double) ptsCntNoNative) / (varCntNoNative)));
+        exporter.collectMetric("#Avg Points-to Target without Native Var(CI):", String.valueOf((ptsCntNoNative.get()) / (varCntNoNative.get())));
     }
 
     private final Set<String> handledNatives = Set.of(
@@ -189,11 +200,7 @@ public class SimplifiedEvaluator implements IEvaluator {
     private final Set<LocalVarNode> mLocalVarNodes = new HashSet<>();
 
     protected Set<Object> getPointsToNewExpr(PointsToSet pts) {
-        final Set<Object> allocSites = new HashSet<>();
-        for (AllocNode n : pts.toCollection()) {
-            allocSites.add(n.getNewExpr());
-        }
-        return allocSites;
+        return pts.toCollection(Sets.newHashSetWithExpectedSize(pts.size()), AllocNode::getNewExpr);
     }
 
     @Override

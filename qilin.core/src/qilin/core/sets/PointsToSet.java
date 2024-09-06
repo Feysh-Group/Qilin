@@ -25,6 +25,7 @@ import soot.jimple.ClassConstant;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * A generic interface to some set of runtime objects computed by a pointer analysis.
@@ -92,7 +93,9 @@ public interface PointsToSet extends soot.PointsToSet {
 
     PointsToSet toCIPointsToSet();
 
-    Collection<AllocNode> toCollection();
+    Set<AllocNode> toCollection();
+
+    <T, C extends Collection<T>> C toCollection(C to, Function<AllocNode, ? extends T> mapper);
 
     Iterator<AllocNode> iterator();
 }

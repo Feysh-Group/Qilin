@@ -132,9 +132,7 @@ public class AliasStat implements AbstractStat {
     }
 
     private boolean checkAlias(LocalVarNode l1, LocalVarNode l2) {
-        PointsToSet pts1 = pta.reachingObjects((Local) l1.getVariable());
-        PointsToSet pts2 = pta.reachingObjects((Local) l2.getVariable());
-        return pts1.hasNonEmptyIntersection(pts2);
+        return pta.hasNonEmptyIntersection((Local) l1.getVariable(), (Local) l2.getVariable());
     }
 
     public static <K, T, V> boolean addToMap(Map<K, Map<T, Set<V>>> m, K key1, T key2, V value) {
