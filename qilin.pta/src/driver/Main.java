@@ -27,7 +27,12 @@ import qilin.pta.PTAConfig;
 import qilin.util.MemoryWatcher;
 import qilin.util.PTAUtils;
 import qilin.util.Stopwatch;
+import soot.ModulePathSourceLocator;
+import soot.Scene;
+import soot.SootClass;
+import soot.SootMethod;
 import soot.options.Options;
+import soot.util.Chain;
 
 import java.io.*;
 import java.util.*;
@@ -36,15 +41,38 @@ import java.util.stream.Collectors;
 public class Main {
     private static final Logger logger = LoggerFactory.getLogger(Main.class);
 
+    public static void printSootSceneInfo() {
+        Chain<SootClass> appCls = PTAScene.v().getApplicationClasses();
+        Chain<SootClass> libCls = PTAScene.v().getLibraryClasses();
+        System.out.println("applicationClasses: " + appCls.size() + " libraryClasses: " + libCls.size());
+        System.out.println("Entries " + Scene.v().getEntryPoints().size());
+        if (appCls.isEmpty()) {
+            throw new RuntimeException("No application classes found");
+        }
+    }
+
+    public static void addAllAppMethodsToEntries() {
+        LinkedList<SootMethod> entries = new LinkedList<>(Scene.v().getEntryPoints());
+        for (Iterator<SootClass> it = PTAScene.v().getApplicationClasses().snapshotIterator(); it.hasNext(); ) {
+            SootClass cls = it.next();
+            entries.addAll(cls.getMethods());
+        }
+        Scene.v().setEntryPoints(entries);
+    }
+
     public static PTA run(String[] args) {
         PTA pta;
         new PTAOption().parseCommandLine(args);
         setupSoot();
+        printSootSceneInfo();
+        addAllAppMethodsToEntries();
+        printSootSceneInfo();
         if (PTAConfig.v().getOutConfig().dumpJimple) {
             String jimplePath = PTAConfig.v().getAppConfig().APP_PATH.replace(".jar", "");
             PTAUtils.dumpJimple(jimplePath);
             System.out.println("Jimple files have been dumped to: " + jimplePath);
         }
+
         pta = PTAFactory.createPTA(PTAConfig.v().getPtaConfig().ptaPattern);
         pta.run();
         return pta;
@@ -55,11 +83,14 @@ public class Main {
         long pid = ProcessHandle.current().pid();
         MemoryWatcher memoryWatcher = new MemoryWatcher(pid, "Main PTA");
         memoryWatcher.start();
-        run(args);
-        ptaTimer.stop();
-        System.out.println(ptaTimer);
-        memoryWatcher.stop();
-        System.out.println(memoryWatcher);
+        try {
+            run(args);
+        } finally {
+            ptaTimer.stop();
+            System.out.println(ptaTimer);
+            memoryWatcher.stop();
+            System.out.println(memoryWatcher);
+        }
     }
 
     public static void setupSoot() {
@@ -149,6 +180,9 @@ public class Main {
     private static Collection<String> getLibJars(String LIB_PATH) {
         if (LIB_PATH == null) {
             return Collections.emptySet();
+        }
+        if (LIB_PATH.equals(ModulePathSourceLocator.DUMMY_CLASSPATH_JDK9_FS)) {
+            return Arrays.asList(LIB_PATH);
         }
         File libFile = new File(LIB_PATH);
         if (libFile.exists()) {
