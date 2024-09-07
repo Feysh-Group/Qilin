@@ -195,4 +195,8 @@ public final class HybridPointsToSet extends PointsToSetInternal {
         return ret;
     }
 
+    public int[] getNodeIdxs() {
+        assert size <= 16;
+        return nodeIdxs;
+    }
 }

@@ -291,7 +291,9 @@ public final class PTAUtils {
             return false;
         if (dst instanceof AnySubType)
             throw new RuntimeException("oops src=" + src + " dst=" + dst);
-        return PTAScene.v().getOrMakeFastHierarchy().canStoreType(src, dst);
+        return PTAScene.v()
+                .getOrMakeFastHierarchy()
+                .canStoreType(src, dst);
     }
 
     public static QueueReader<SootMethod> dispatch(Type type, VirtualCallSite site) {

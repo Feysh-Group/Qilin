@@ -15,7 +15,7 @@
  * License along with this program.  If not, see
  * <https://www.gnu.org/licenses/lgpl-3.0.en.html>.
  */
-
+/*
 package qilin.core.solver;
 
 import qilin.CoreConfig;
@@ -269,11 +269,11 @@ public class Solver extends Propagator {
             final VarNode throwNode = ets.getThrowNode();
             eh.exceptionDispatch(throwNode.getP2Set().getOldSet(), ets);
         }
-        /*
-         * there are some actual parameter to formal parameter edges whose source nodes are not in the worklist.
-         * For this case, we should use the following loop to update the target nodes and insert the
-         * target nodes into the worklist if nesseary.
-         * */
+        //
+        // there are some actual parameter to formal parameter edges whose source nodes are not in the worklist.
+        // For this case, we should use the following loop to update the target nodes and insert the
+        // target nodes into the worklist if nesseary.
+        //
         while (addedEdges.hasNext()) {
             final Node addedSrc = addedEdges.next();
             final Node addedTgt = addedEdges.next();
@@ -322,3 +322,4 @@ public class Solver extends Propagator {
         return PTAUtils.isEmptyArray(base);
     }
 }
+*/

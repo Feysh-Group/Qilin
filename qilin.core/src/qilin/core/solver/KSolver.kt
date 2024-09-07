@@ -17,12 +17,16 @@
  */
 package qilin.core.solver
 
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
 import qilin.CoreConfig
 import qilin.core.PTA
 import qilin.core.PTAScene
 import qilin.core.builder.CallGraphBuilder
 import qilin.core.builder.ExceptionHandler
 import qilin.core.pag.*
+import qilin.core.sets.ExpectedSize
+import qilin.core.sets.HybridPointsToSet
 import qilin.core.sets.P2SetVisitor
 import qilin.core.sets.PointsToSetInternal
 import qilin.util.PTAUtils
@@ -38,10 +42,16 @@ import soot.options.Options
 import soot.util.queue.ChunkedQueue
 import soot.util.queue.QueueReader
 import java.util.*
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentSkipListSet
 import java.util.function.Consumer
+import kotlin.collections.HashMap
+import kotlin.math.max
 
 class KSolver(pta: PTA) : Propagator() {
-    private val valNodeWorkList = TreeSet<ValNode>()
+    val concurrency = max(DEFAULT_CONCURRENCY, 1)
+
+    private val valNodeWorkList = ConcurrentSkipListSet<ValNode>()
     private val pag: PAG
     private val pta: PTA
     private val cgb: CallGraphBuilder = pta.cgb
@@ -71,30 +81,35 @@ class KSolver(pta: PTA) : Propagator() {
             set.forEach(
                 Consumer { v: VarNode -> propagatePTS(v, a) })
         }
-        while (!valNodeWorkList.isEmpty()) {
-            val curr = checkNotNull(valNodeWorkList.pollFirst())
-            val pts = curr.p2Set
-            val newset: PointsToSetInternal = pts.newSet
-            pag.simpleLookup(curr).forEach(Consumer { to: ValNode -> propagatePTS(to, newset) })
+        runBlocking(Dispatchers.Default) {
+            while (!valNodeWorkList.isEmpty()) {
+                val curr = checkNotNull(valNodeWorkList.pollFirst())
+                val pts = curr.p2Set
+                val newset = pts.newSet
+                val job = propagatePTSSimple(pag.simpleLookup(curr), newset)
 
-            if (curr is VarNode) {
-                // Step 1 continues.
-                val throwSites = eh.throwSitesLookUp(curr)
-                for (site in throwSites) {
-                    eh.exceptionDispatch(newset, site)
+                if (curr is VarNode) {
+                    // Step 1 continues.
+                    val throwSites = eh.throwSitesLookUp(curr)
+                    for (site in throwSites) {
+                        eh.exceptionDispatch(newset, site)
+                    }
+                    // Step 2: Resolving Indirect Constraints.
+                    job?.join()
+                    handleStoreAndLoadOnBase(curr)
+                    // Step 3: Collecting New Constraints.
+                    val sites = cgb.callSitesLookUp(curr)
+                    for (site in sites) {
+                        cgb.virtualCallDispatch(newset, site)
+                    }
+                    processStmts(newRMs)
+                } else {
+                    job?.join()
                 }
-                // Step 2: Resolving Indirect Constraints.
-                handleStoreAndLoadOnBase(curr)
-                // Step 3: Collecting New Constraints.
-                val sites = cgb.callSitesLookUp(curr)
-                for (site in sites) {
-                    cgb.virtualCallDispatch(newset, site)
-                }
-                processStmts(newRMs)
+                pts.flushNew()
+                // Step 4: Activating New Constraints.
+                activateConstraints(newCalls, newRMs, newThrows, newPAGEdges)
             }
-            pts.flushNew()
-            // Step 4: Activating New Constraints.
-            activateConstraints(newCalls, newRMs, newThrows, newPAGEdges)
         }
     }
 
@@ -298,11 +313,52 @@ class KSolver(pta: PTA) : Propagator() {
         }
     }
 
-    protected fun propagatePTS(pointer: ValNode, other: PointsToSetInternal) {
+
+    private fun CoroutineScope.propagatePTSSimple(pointer: Set<ValNode>, other: HybridPointsToSet): Job? {
+        val sz = pointer.size
+        if (sz >= concurrency * 2 && other.size() >= 10) {
+            return launch {
+                val f = pointer.chunked(max(sz / concurrency, 24))
+                for (c in f) {
+                    launch {
+                        for (p in c) {
+                            propagatePTS(p, other)
+                        }
+                    }
+                }
+            }
+        } else {
+            for (p in pointer) {
+                propagatePTS(p, other)
+            }
+        }
+        return null
+    }
+
+
+    protected fun propagatePTS(pointer: ValNode, other: HybridPointsToSet) {
+        val sz = other.size()
+        if (sz == 0) return
+        if (sz <= 2) {
+            val allocNodeNumberer = pag.allocNodeNumberer
+            for (node in other.nodeIdxs) {
+                if (node == 0) break
+                propagatePTS(pointer, allocNodeNumberer.get(node.toLong()))
+            }
+            return
+        }
         val addTo = pointer.p2Set
+        val toType = pointer.type
         val p2SetVisitor: P2SetVisitor = object : P2SetVisitor(pta) {
-            public override fun visit(n: Node) {
-                if (PTAUtils.addWithTypeFiltering(addTo, pointer.type, n)) {
+            val castNeverFailsCache = IdentityHashMap<Type, Boolean>(ExpectedSize.capacity(16))
+            public override fun visit(node: Node) {
+                val nodeType: Type = node.type
+                var b = castNeverFailsCache[nodeType]
+                if (b == null) {
+                    b = PTAUtils.castNeverFails(nodeType, toType)
+                    castNeverFailsCache[nodeType] = b
+                }
+                if (b && addTo.add(node.number)) {
                     returnValue = true
                 }
             }
