@@ -18,6 +18,7 @@
 
 package qilin.core.pag;
 
+import kotlin.Pair;
 import qilin.CoreConfig;
 import qilin.core.PTA;
 import qilin.core.PTAScene;
@@ -40,7 +41,9 @@ import soot.util.queue.ChunkedQueue;
 import soot.util.queue.QueueReader;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 /**
@@ -53,11 +56,11 @@ public class PAG {
     protected final ReflectionModel reflectionModel;
 
     // ========================= context-sensitive nodes =================================
-    protected final Map<VarNode, Map<Context, ContextVarNode>> contextVarNodeMap;
-    protected final Map<AllocNode, Map<Context, ContextAllocNode>> contextAllocNodeMap;
-    protected final Map<SootMethod, Map<Context, MethodOrMethodContext>> contextMethodMap;
-    protected final Map<MethodPAG, Set<Context>> addedContexts;
-    protected final Map<Context, Map<SparkField, ContextField>> contextFieldMap;
+    protected final ConcurrentHashMap<VarNode, Map<Context, ContextVarNode>> contextVarNodeMap;
+    protected final ConcurrentHashMap<AllocNode, Map<Context, ContextAllocNode>> contextAllocNodeMap;
+    protected final ConcurrentHashMap<SootMethod, Map<Context, MethodOrMethodContext>> contextMethodMap;
+    protected final ConcurrentHashMap<MethodPAG, Set<Context>> addedContexts;
+    protected final ConcurrentHashMap<Context, Map<SparkField, ContextField>> contextFieldMap;
 
     // ==========================data=========================
     protected ArrayNumberer<AllocNode> allocNodeNumberer = new ArrayNumberer<>();
@@ -66,50 +69,50 @@ public class PAG {
     private static AtomicInteger maxFinishNumber = new AtomicInteger(0);
 
     // ========================= ir to Node ==============================================
-    protected final Map<Object, AllocNode> valToAllocNode;
-    protected final Map<Object, ValNode> valToValNode;
-    protected final Map<SootMethod, MethodPAG> methodToPag;
+    protected final ConcurrentHashMap<Object, AllocNode> valToAllocNode;
+    protected final ConcurrentHashMap<Object, ValNode> valToValNode;
+    protected final ConcurrentHashMap<SootMethod, MethodPAG> methodToPag;
     protected final Set<SootField> globals;
     protected final Set<Local> locals;
     // ==========================outer objects==============================
-    protected ChunkedQueue<Node> edgeQueue;
+    protected ChunkedQueue<Pair<Node, Node>> edgeQueue;
 
-    protected final Map<ValNode, Set<ValNode>> simple;
-    protected final Map<ValNode, Set<ValNode>> simpleInv;
-    protected final Map<FieldRefNode, Set<VarNode>> load;
-    protected final Map<VarNode, Set<FieldRefNode>> loadInv;
-    protected final Map<AllocNode, Set<VarNode>> alloc;
-    protected final Map<VarNode, Set<AllocNode>> allocInv;
-    protected final Map<VarNode, Set<FieldRefNode>> store;
-    protected final Map<FieldRefNode, Set<VarNode>> storeInv;
+    protected final ConcurrentHashMap<ValNode, Set<ValNode>> simple;
+    protected final ConcurrentHashMap<ValNode, Set<ValNode>> simpleInv;
+    protected final ConcurrentHashMap<FieldRefNode, Set<VarNode>> load;
+    protected final ConcurrentHashMap<VarNode, Set<FieldRefNode>> loadInv;
+    protected final ConcurrentHashMap<AllocNode, Set<VarNode>> alloc;
+    protected final ConcurrentHashMap<VarNode, Set<AllocNode>> allocInv;
+    protected final ConcurrentHashMap<VarNode, Set<FieldRefNode>> store;
+    protected final ConcurrentHashMap<FieldRefNode, Set<VarNode>> storeInv;
 
     protected final PTA pta;
 
     public PAG(PTA pta) {
         this.pta = pta;
-        this.simple = DataFactory.createMap();
-        this.simpleInv = DataFactory.createMap();
-        this.load = DataFactory.createMap();
-        this.loadInv = DataFactory.createMap();
-        this.alloc = DataFactory.createMap();
-        this.allocInv = DataFactory.createMap();
-        this.store = DataFactory.createMap();
-        this.storeInv = DataFactory.createMap();
+        this.simple = DataFactory.createConcurrentMap();
+        this.simpleInv = DataFactory.createConcurrentMap();
+        this.load = DataFactory.createConcurrentMap();
+        this.loadInv = DataFactory.createConcurrentMap();
+        this.alloc = DataFactory.createConcurrentMap();
+        this.allocInv = DataFactory.createConcurrentMap();
+        this.store = DataFactory.createConcurrentMap();
+        this.storeInv = DataFactory.createConcurrentMap();
         this.nativeDriver = new NativeMethodDriver();
         this.reflectionModel = createReflectionModel();
-        this.contextVarNodeMap = DataFactory.createMap(16000);
-        this.contextAllocNodeMap = DataFactory.createMap(6000);
-        this.contextMethodMap = DataFactory.createMap(6000);
-        this.addedContexts = DataFactory.createMap();
-        this.contextFieldMap = DataFactory.createMap(6000);
-        this.valToAllocNode = DataFactory.createMap(10000);
-        this.valToValNode = DataFactory.createMap(100000);
-        this.methodToPag = DataFactory.createMap();
+        this.contextVarNodeMap = DataFactory.createConcurrentMap(16000);
+        this.contextAllocNodeMap = DataFactory.createConcurrentMap(6000);
+        this.contextMethodMap = DataFactory.createConcurrentMap(6000);
+        this.addedContexts = DataFactory.createConcurrentMap();
+        this.contextFieldMap = DataFactory.createConcurrentMap(6000);
+        this.valToAllocNode = DataFactory.createConcurrentMap(10000);
+        this.valToValNode = DataFactory.createConcurrentMap(100000);
+        this.methodToPag = DataFactory.createConcurrentMap();
         this.globals = DataFactory.createSet(100000);
         this.locals = DataFactory.createSet(100000);
     }
 
-    public void setEdgeQueue(ChunkedQueue<Node> edgeQueue) {
+    public void setEdgeQueue(ChunkedQueue<Pair<Node, Node>> edgeQueue) {
         this.edgeQueue = edgeQueue;
     }
 
@@ -137,13 +140,13 @@ public class PAG {
         return this.pta;
     }
 
-    public QueueReader<Node> edgeReader() {
+    public QueueReader<Pair<Node, Node>> edgeReader() {
         return edgeQueue.reader();
     }
 
     // =======================add edge===============================
     protected <K, V> boolean addToMap(Map<K, Set<V>> m, K key, V value) {
-        Set<V> valueList = m.computeIfAbsent(key, k -> DataFactory.createSet(4));
+        Set<V> valueList = m.computeIfAbsent(key, k -> DataFactory.createConcurrentSet(4));
         return valueList.add(value);
     }
 
@@ -190,8 +193,7 @@ public class PAG {
      */
     public final void addEdge(Node from, Node to) {
         if (addEdgeIntenal(from, to)) {
-            edgeQueue.add(from);
-            edgeQueue.add(to);
+            edgeQueue.add(new Pair<>(from, to));
         }
     }
 
@@ -294,8 +296,14 @@ public class PAG {
     public AllocNode makeAllocNode(Object newExpr, Type type, SootMethod m) {
         AllocNode ret = valToAllocNode.get(newExpr);
         if (ret == null) {
-            valToAllocNode.put(newExpr, ret = new AllocNode(newExpr, type, m));
-            allocNodeNumberer.add(ret);
+            synchronized (valToAllocNode) {
+                ret = valToAllocNode.get(newExpr);
+                if (ret == null) {
+                    ret = new AllocNode(newExpr, type, m);
+                    allocNodeNumberer.add(ret);
+                    valToAllocNode.put(newExpr, ret);
+                }
+            }
         } else if (!(ret.getType().equals(type))) {
             throw new RuntimeException("NewExpr " + newExpr + " of type " + type + " previously had type " + ret.getType());
         }
@@ -309,8 +317,14 @@ public class PAG {
         }
         AllocNode ret = valToAllocNode.get(stringConstant);
         if (ret == null) {
-            valToAllocNode.put(stringConstant, ret = new StringConstantNode(stringConstant));
-            allocNodeNumberer.add(ret);
+            synchronized (valToAllocNode) {
+                ret = valToAllocNode.get(stringConstant);
+                if (ret == null) {
+                    ret = new StringConstantNode(stringConstant);
+                    allocNodeNumberer.add(ret);
+                    valToAllocNode.put(stringConstant, ret);
+                }
+            }
         }
         return ret;
     }
@@ -318,8 +332,14 @@ public class PAG {
     public AllocNode makeClassConstantNode(ClassConstant cc) {
         AllocNode ret = valToAllocNode.get(cc);
         if (ret == null) {
-            valToAllocNode.put(cc, ret = new ClassConstantNode(cc));
-            allocNodeNumberer.add(ret);
+            synchronized (valToAllocNode) {
+                ret = valToAllocNode.get(cc);
+                if (ret == null) {
+                    ret = new ClassConstantNode(cc);
+                    allocNodeNumberer.add(ret);
+                    valToAllocNode.put(cc, ret);
+                }
+            }
         }
         return ret;
     }
@@ -330,10 +350,16 @@ public class PAG {
     public GlobalVarNode makeGlobalVarNode(Object value, Type type) {
         GlobalVarNode ret = (GlobalVarNode) valToValNode.get(value);
         if (ret == null) {
-            ret = (GlobalVarNode) valToValNode.computeIfAbsent(value, k -> new GlobalVarNode(value, type));
-            valNodeNumberer.add(ret);
-            if (value instanceof SootField) {
-                globals.add((SootField) value);
+            synchronized (valToValNode) {
+                ret = (GlobalVarNode) valToValNode.get(value);
+                if (ret == null) {
+                    ret = new GlobalVarNode(value, type);
+                    valNodeNumberer.add(ret);
+                    if (value instanceof SootField) {
+                        globals.add((SootField) value);
+                    }
+                    valToValNode.put(value, ret);
+                }
             }
         } else if (!(ret.getType().equals(type))) {
             throw new RuntimeException("Value " + value + " of type " + type + " previously had type " + ret.getType());
@@ -347,14 +373,21 @@ public class PAG {
     public LocalVarNode makeLocalVarNode(Object value, Type type, SootMethod method) {
         LocalVarNode ret = (LocalVarNode) valToValNode.get(value);
         if (ret == null) {
-            valToValNode.put(value, ret = new LocalVarNode(value, type, method));
-            valNodeNumberer.add(ret);
-            if (value instanceof Local local) {
-                if (local.getNumber() == 0) {
-                    PTAScene.v().getLocalNumberer().add(local);
+            synchronized (valToValNode) {
+                ret = (LocalVarNode) valToValNode.get(value);
+                if (ret == null) {
+                    ret = new LocalVarNode(value, type, method);
+                    valNodeNumberer.add(ret);
+                    if (value instanceof Local local) {
+                        if (local.getNumber() == 0) {
+                            PTAScene.v().getLocalNumberer().add(local);
+                        }
+                        locals.add(local);
+                    }
+                    valToValNode.put(value, ret);
                 }
-                locals.add(local);
             }
+
         } else if (!(ret.getType().equals(type))) {
             throw new RuntimeException("Value " + value + " of type " + type + " previously had type " + ret.getType());
         }
@@ -368,8 +401,14 @@ public class PAG {
     public FieldValNode makeFieldValNode(SparkField field) {
         FieldValNode ret = (FieldValNode) valToValNode.get(field);
         if (ret == null) {
-            valToValNode.put(field, ret = new FieldValNode(field));
-            valNodeNumberer.add(ret);
+            synchronized (valToValNode) {
+                ret = (FieldValNode) valToValNode.get(field);
+                if (ret == null) {
+                    ret = new FieldValNode(field);
+                    valNodeNumberer.add(ret);
+                    valToValNode.put(field, ret);
+                }
+            }
         }
         return ret;
     }
@@ -378,11 +417,14 @@ public class PAG {
      * Finds or creates the FieldRefNode for base variable base and field field, of
      * type type.
      */
+    private static final Object lock1 = new Object();
     public FieldRefNode makeFieldRefNode(VarNode base, SparkField field) {
         FieldRefNode ret = base.dot(field);
         if (ret == null) {
-            ret = new FieldRefNode(base, field);
-            fieldRefNodeNumberer.add(ret);
+            synchronized (lock1) {
+                ret = new FieldRefNode(base, field);
+                fieldRefNodeNumberer.add(ret);
+            }
         }
         return ret;
     }
@@ -391,11 +433,17 @@ public class PAG {
      * Finds or creates the ContextVarNode for base variable base and context.
      */
     public ContextVarNode makeContextVarNode(VarNode base, Context context) {
-        Map<Context, ContextVarNode> contextMap = contextVarNodeMap.computeIfAbsent(base, k1 -> DataFactory.createMap());
+        Map<Context, ContextVarNode> contextMap = contextVarNodeMap.computeIfAbsent(base, k1 -> DataFactory.createConcurrentMap());
         ContextVarNode ret = contextMap.get(context);
         if (ret == null) {
-            contextMap.put(context, ret = new ContextVarNode(base, context));
-            valNodeNumberer.add(ret);
+            synchronized (contextMap) {
+                ret = contextMap.get(context);
+                if (ret == null) {
+                    ret = new ContextVarNode(base, context);
+                    valNodeNumberer.add(ret);
+                    contextMap.put(context, ret);
+                }
+            }
         }
         return ret;
     }
@@ -404,11 +452,17 @@ public class PAG {
      * Finds or creates the ContextAllocNode for base alloc site and context.
      */
     public ContextAllocNode makeContextAllocNode(AllocNode allocNode, Context context) {
-        Map<Context, ContextAllocNode> contextMap = contextAllocNodeMap.computeIfAbsent(allocNode, k1 -> DataFactory.createMap());
+        Map<Context, ContextAllocNode> contextMap = contextAllocNodeMap.computeIfAbsent(allocNode, k1 -> DataFactory.createConcurrentMap());
         ContextAllocNode ret = contextMap.get(context);
         if (ret == null) {
-            contextMap.put(context, ret = new ContextAllocNode(allocNode, context));
-            allocNodeNumberer.add(ret);
+            synchronized (contextMap) {
+                ret = contextMap.get(context);
+                if (ret == null) {
+                    ret = new ContextAllocNode(allocNode, context);
+                    allocNodeNumberer.add(ret);
+                    contextMap.put(context, ret);
+                }
+            }
         }
         return ret;
     }
@@ -417,7 +471,7 @@ public class PAG {
      * Finds or creates the ContextMethod for method and context.
      */
     public MethodOrMethodContext makeContextMethod(Context context, SootMethod method) {
-        Map<Context, MethodOrMethodContext> contextMap = contextMethodMap.computeIfAbsent(method, k1 -> DataFactory.createMap());
+        Map<Context, MethodOrMethodContext> contextMap = contextMethodMap.computeIfAbsent(method, k1 -> DataFactory.createConcurrentMap());
         return contextMap.computeIfAbsent(context, k -> new ContextMethod(method, context));
     }
 
@@ -455,11 +509,17 @@ public class PAG {
 
     public ContextField makeContextField(Context context, FieldValNode fieldValNode) {
         SparkField field = fieldValNode.getField();
-        Map<SparkField, ContextField> field2odotf = contextFieldMap.computeIfAbsent(context, k -> DataFactory.createMap());
+        Map<SparkField, ContextField> field2odotf = contextFieldMap.computeIfAbsent(context, k -> DataFactory.createConcurrentMap());
         ContextField ret = field2odotf.get(field);
         if (ret == null) {
-            field2odotf.put(field, ret = new ContextField(context, field));
-            valNodeNumberer.add(ret);
+            synchronized (field2odotf) {
+                ret = field2odotf.get(field);
+                if (ret == null) {
+                    ret = new ContextField(context, field);
+                    valNodeNumberer.add(ret);
+                    field2odotf.put(field, ret);
+                }
+            }
         }
         return ret;
     }
@@ -503,7 +563,7 @@ public class PAG {
 
     protected ReflectionModel createReflectionModel() {
         ReflectionModel model;
-        if (CoreConfig.v().getAppConfig().REFLECTION_LOG != null && CoreConfig.v().getAppConfig().REFLECTION_LOG.length() > 0) {
+        if (CoreConfig.v().getAppConfig().REFLECTION_LOG != null && !CoreConfig.v().getAppConfig().REFLECTION_LOG.isEmpty()) {
             model = new TamiflexModel();
         } else {
             model = new NopReflectionModel();

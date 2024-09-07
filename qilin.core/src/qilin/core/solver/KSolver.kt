@@ -42,10 +42,8 @@ import soot.options.Options
 import soot.util.queue.ChunkedQueue
 import soot.util.queue.QueueReader
 import java.util.*
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentSkipListSet
 import java.util.function.Consumer
-import kotlin.collections.HashMap
 import kotlin.math.max
 
 class KSolver(pta: PTA) : Propagator() {
@@ -56,13 +54,18 @@ class KSolver(pta: PTA) : Propagator() {
     private val pta: PTA
     private val cgb: CallGraphBuilder = pta.cgb
     private val eh: ExceptionHandler
-    private val throwSiteQueue = ChunkedQueue<ExceptionThrowSite>()
-    private val virtualCallSiteQueue = ChunkedQueue<VirtualCallSite>()
-    private val edgeQueue = ChunkedQueue<Node>()
+    private val throwSiteQueue: ChunkedQueue<ExceptionThrowSite>
+    private val virtualCallSiteQueue: ChunkedQueue<VirtualCallSite>
+    private val edgeQueue: ChunkedQueue<Pair<Node, Node>>
 
-    private val rmQueue = ChunkedQueue<MethodOrMethodContext>()
+    private val rmQueue: ChunkedQueue<MethodOrMethodContext>
 
     init {
+        throwSiteQueue = ChunkedQueue()
+        virtualCallSiteQueue = ChunkedQueue()
+        edgeQueue = ChunkedQueue()
+        rmQueue = ChunkedQueue()
+
         cgb.setRMQueue(rmQueue)
         this.pag = pta.pag
         pag.setEdgeQueue(edgeQueue)
@@ -274,7 +277,7 @@ class KSolver(pta: PTA) : Propagator() {
         newCalls: QueueReader<VirtualCallSite>,
         newRMs: QueueReader<MethodOrMethodContext>,
         newThrows: QueueReader<ExceptionThrowSite>,
-        addedEdges: QueueReader<Node>
+        addedEdges: QueueReader<Pair<Node, Node>>
     ) {
         while (newCalls.hasNext()) {
             while (newCalls.hasNext()) {
@@ -296,8 +299,7 @@ class KSolver(pta: PTA) : Propagator() {
          * target nodes into the worklist if nesseary.
          * */
         while (addedEdges.hasNext()) {
-            val addedSrc = addedEdges.next()
-            val addedTgt = addedEdges.next()
+            val (addedSrc, addedTgt) = addedEdges.next()
             if (addedSrc is VarNode && addedTgt is VarNode || addedSrc is ContextField || addedTgt is ContextField
             ) { // x = y; x = o.f; o.f = y;
                 val srcv = addedSrc as ValNode

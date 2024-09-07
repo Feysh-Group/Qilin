@@ -56,10 +56,10 @@ public class CallGraphBuilder {
         this.pta = pta;
         this.pag = pta.getPag();
         PTAScene.v().setCallGraph(new CallGraph());
-        receiverToSites = DataFactory.createMap(PTAScene.v().getLocalNumberer().size());
-        methodToInvokeStmt = DataFactory.createMap();
-        reachMethods = DataFactory.createSet();
-        calledges = DataFactory.createSet();
+        receiverToSites = DataFactory.createConcurrentMap(PTAScene.v().getLocalNumberer().size());
+        methodToInvokeStmt = DataFactory.createConcurrentMap();
+        reachMethods = DataFactory.createConcurrentSet();
+        calledges = DataFactory.createConcurrentSet();
     }
 
     public void setRMQueue(ChunkedQueue<MethodOrMethodContext> rmQueue) {
@@ -160,7 +160,7 @@ public class CallGraphBuilder {
     }
 
     public void injectCallEdge(Object heapOrType, MethodOrMethodContext callee, Kind kind) {
-        Map<Object, Stmt> stmtMap = methodToInvokeStmt.computeIfAbsent(callee.method(), k -> DataFactory.createMap());
+        Map<Object, Stmt> stmtMap = methodToInvokeStmt.computeIfAbsent(callee.method(), k -> DataFactory.createConcurrentMap());
         if (!stmtMap.containsKey(heapOrType)) {
             SootMethod rm = PTAScene.v().getMethod("<java.lang.ClassLoader: java.lang.Class loadClass(java.lang.String)>");
             InvokeExpr ie = new JStaticInvokeExpr(callee.method().makeRef(), Collections.emptyList());
@@ -187,7 +187,7 @@ public class CallGraphBuilder {
     }
 
     public boolean recordVirtualCallSite(VarNode receiver, VirtualCallSite site) {
-        Collection<VirtualCallSite> sites = receiverToSites.computeIfAbsent(receiver, k -> DataFactory.createSet());
+        Collection<VirtualCallSite> sites = receiverToSites.computeIfAbsent(receiver, k -> DataFactory.createConcurrentSet());
         return sites.add(site);
     }
 
