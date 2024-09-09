@@ -180,8 +180,13 @@ public class MethodPAG {
         if (src == null) {
             return;
         }
-        internalEdges.add(src);
-        internalEdges.add(dst);
+        if (dst == null) {
+            throw new IllegalArgumentException("dst is null");
+        }
+        synchronized (internalEdges) {
+            internalEdges.add(src);
+            internalEdges.add(dst);
+        }
     }
 
     public QueueReader<Node> getInternalReader() {

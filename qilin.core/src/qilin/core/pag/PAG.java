@@ -37,13 +37,10 @@ import soot.jimple.internal.JAssignStmt;
 import soot.jimple.internal.JimpleLocal;
 import soot.jimple.spark.pag.SparkField;
 import soot.util.ArrayNumberer;
-import soot.util.queue.ChunkedQueue;
-import soot.util.queue.QueueReader;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 /**
@@ -75,7 +72,7 @@ public class PAG {
     protected final Set<SootField> globals;
     protected final Set<Local> locals;
     // ==========================outer objects==============================
-    protected ChunkedQueue<Pair<Node, Node>> edgeQueue;
+    protected Queue<Pair<Node, Node>> edgeQueue;
 
     protected final ConcurrentHashMap<ValNode, Set<ValNode>> simple;
     protected final ConcurrentHashMap<ValNode, Set<ValNode>> simpleInv;
@@ -112,7 +109,7 @@ public class PAG {
         this.locals = DataFactory.createSet(100000);
     }
 
-    public void setEdgeQueue(ChunkedQueue<Pair<Node, Node>> edgeQueue) {
+    public void setEdgeQueue(Queue<Pair<Node, Node>> edgeQueue) {
         this.edgeQueue = edgeQueue;
     }
 
@@ -138,10 +135,6 @@ public class PAG {
 
     public PTA getPta() {
         return this.pta;
-    }
-
-    public QueueReader<Pair<Node, Node>> edgeReader() {
-        return edgeQueue.reader();
     }
 
     // =======================add edge===============================
@@ -597,8 +590,8 @@ public class PAG {
                     handleArrayCopy(m);
                 }
             }
+            return methodToPag.computeIfAbsent(m, k -> new MethodPAG(this, m, body));
         }
-        return methodToPag.computeIfAbsent(m, k -> new MethodPAG(this, m, body));
     }
 
     private void handleArrayCopy(SootMethod method) {
@@ -665,4 +658,8 @@ public class PAG {
         addedContexts.clear();
     }
 
+    @Override
+    public String toString() {
+        return "simple: " + simple.size() + " load: " + load.size() + " store: " + store.size() + " alloc: " + alloc.size();
+    }
 }

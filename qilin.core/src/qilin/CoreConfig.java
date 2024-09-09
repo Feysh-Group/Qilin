@@ -90,7 +90,7 @@ public class CoreConfig {
 
         public String ptaName;
 
-        public boolean printAliasInfo = false; // 性能消耗很高
+        public boolean printAliasInfo = true; // 性能消耗很高
     }
 
     public static class ApplicationConfiguration {

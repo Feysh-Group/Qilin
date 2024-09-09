@@ -58,7 +58,8 @@ public class AliasStat implements AbstractStat {
             MethodPAG srcmpag = pta.getPag().getMethodPAG(m);
             QueueReader<Node> reader = srcmpag.getInternalReader().clone();
             while (reader.hasNext()) {
-                Node from = reader.next(), to = reader.next();
+                Node from = reader.next();
+                Node to = reader.next();
                 if (from instanceof LocalVarNode) {
                     if (to instanceof LocalVarNode) {
                         if (!(((VarNode) from).getVariable() instanceof Local))
