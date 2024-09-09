@@ -36,7 +36,7 @@ import java.util.Map;
  */
 public abstract class VarNode extends ValNode {
     protected Object variable;
-    protected Map<SparkField, FieldRefNode> fields;
+    protected volatile Map<SparkField, FieldRefNode> fields;
 
     protected boolean interProcTarget = false;
     protected boolean interProcSource = false;

@@ -127,6 +127,19 @@ public abstract class PTA implements PointsToAnalysis {
         return new UnmodifiablePointsToSet(this, ret);
     }
 
+    public boolean hasNonEmptyIntersection(Local l1, Local l2) {
+        Collection<VarNode> vns1 = pag.getVarNodes(l1);
+        Collection<VarNode> vns2 = pag.getVarNodes(l2);
+        for (VarNode x : vns1) {
+            DoublePointsToSet xp = x.getP2Set();
+            for (VarNode y : vns2) {
+                if (xp.hasNonEmptyIntersection(y.getP2Set()))
+                    return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * Returns the set of objects pointed by n:
      * case 1: n is an insensitive node, return objects pointed by n under every possible context.

@@ -31,9 +31,10 @@ import soot.SootMethod;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class DataDrivenSelector extends CtxSelector {
-    private final Map<SootMethod, FeaturesTrueTable> m2ftt = new HashMap<>();
+    private final ConcurrentHashMap<SootMethod, FeaturesTrueTable> m2ftt = new ConcurrentHashMap<>();
     private final Class mClass;
 
     public DataDrivenSelector(Class mClass) {

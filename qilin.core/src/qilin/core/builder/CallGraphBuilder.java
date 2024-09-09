@@ -45,7 +45,6 @@ public class CallGraphBuilder {
     protected final Map<VarNode, Collection<VirtualCallSite>> receiverToSites;
     protected final Map<SootMethod, Map<Object, Stmt>> methodToInvokeStmt;
     protected final Set<MethodOrMethodContext> reachMethods;
-    private ChunkedQueue<MethodOrMethodContext> rmQueue;
 
     protected final Set<Edge> calledges;
     protected final PTA pta;
@@ -56,18 +55,18 @@ public class CallGraphBuilder {
         this.pta = pta;
         this.pag = pta.getPag();
         PTAScene.v().setCallGraph(new CallGraph());
-        receiverToSites = DataFactory.createMap(PTAScene.v().getLocalNumberer().size());
-        methodToInvokeStmt = DataFactory.createMap();
-        reachMethods = DataFactory.createSet();
-        calledges = DataFactory.createSet();
-    }
-
-    public void setRMQueue(ChunkedQueue<MethodOrMethodContext> rmQueue) {
-        this.rmQueue = rmQueue;
+        receiverToSites = DataFactory.createConcurrentMap(PTAScene.v().getLocalNumberer().size());
+        methodToInvokeStmt = DataFactory.createConcurrentMap();
+        reachMethods = DataFactory.createConcurrentSet();
+        calledges = DataFactory.createConcurrentSet();
     }
 
     public Collection<MethodOrMethodContext> getReachableMethods() {
         return reachMethods;
+    }
+
+    public boolean addReachableSites(MethodOrMethodContext rm) {
+        return reachMethods.add(rm);
     }
 
     // initialize the receiver to sites map with the number of locals * an
@@ -114,20 +113,13 @@ public class CallGraphBuilder {
         return PTAScene.v().getEntryPoints().stream().map(x -> pta.parameterize(x, pta.emptyContext())).collect(Collectors.toList());
     }
 
-    public void initReachableMethods() {
-        for (MethodOrMethodContext momc : getEntryPoints()) {
-            if (reachMethods.add(momc)) {
-                rmQueue.add(momc);
-            }
-        }
-    }
 
     public VarNode getReceiverVarNode(Local receiver, MethodOrMethodContext m) {
         LocalVarNode base = pag.makeLocalVarNode(receiver, receiver.getType(), m.method());
         return (VarNode) pta.parameterize(base, m.context());
     }
 
-    protected void dispatch(AllocNode receiverNode, VirtualCallSite site) {
+    protected void dispatch(AllocNode receiverNode, VirtualCallSite site, ChunkedQueue<MethodOrMethodContext> rmQueue) {
         Type type = receiverNode.getType();
         final QueueReader<SootMethod> targets = PTAUtils.dispatch(type, site);
         while (targets.hasNext()) {
@@ -139,44 +131,44 @@ public class CallGraphBuilder {
                 }
             }
             if (target.getParameterCount() != site.iie().getArgCount()) {
-                log.error("Parameter count is not equal. site: {} target: {} at container {}", site.iie(), target.getParameterCount(), site.container().method());
+                log.error("Parameter count is not equal. site: {} target: {} at container {}", site.iie(), target, site.container().method());
                 continue;
             }
             if (target.isStatic()) {
                 log.error("Target method is static in virtual invoke. site: {} target: {} at container {}", site.iie(), target, site.container().method());
                 continue;
             }
-            addVirtualEdge(site.container(), site.getUnit(), target, site.kind(), receiverNode);
+            addVirtualEdge(site.container(), site.getUnit(), target, site.kind(), receiverNode, rmQueue);
         }
     }
 
-    private void addVirtualEdge(MethodOrMethodContext caller, Unit callStmt, SootMethod callee, Kind kind, AllocNode receiverNode) {
+    private void addVirtualEdge(MethodOrMethodContext caller, Unit callStmt, SootMethod callee, Kind kind, AllocNode receiverNode, ChunkedQueue<MethodOrMethodContext> rmQueue) {
         Context tgtContext = pta.createCalleeCtx(caller, receiverNode, new CallSite(callStmt), callee);
         MethodOrMethodContext cstarget = pta.parameterize(callee, tgtContext);
-        handleCallEdge(new Edge(caller, callStmt, cstarget, kind));
+        handleCallEdge(new Edge(caller, callStmt, cstarget, kind), rmQueue);
         Node thisRef = pag.getMethodPAG(callee).nodeFactory().caseThis();
         thisRef = pta.parameterize(thisRef, cstarget.context());
         pag.addEdge(receiverNode, thisRef);
     }
 
-    public void injectCallEdge(Object heapOrType, MethodOrMethodContext callee, Kind kind) {
-        Map<Object, Stmt> stmtMap = methodToInvokeStmt.computeIfAbsent(callee.method(), k -> DataFactory.createMap());
+    public void injectCallEdge(Object heapOrType, MethodOrMethodContext callee, Kind kind, ChunkedQueue<MethodOrMethodContext> rmQueue) {
+        Map<Object, Stmt> stmtMap = methodToInvokeStmt.computeIfAbsent(callee.method(), k -> DataFactory.createConcurrentMap());
         if (!stmtMap.containsKey(heapOrType)) {
             SootMethod rm = PTAScene.v().getMethod("<java.lang.ClassLoader: java.lang.Class loadClass(java.lang.String)>");
             InvokeExpr ie = new JStaticInvokeExpr(callee.method().makeRef(), Collections.emptyList());
             JInvokeStmt stmt = new JInvokeStmt(ie);
             stmtMap.put(heapOrType, stmt);
-            handleCallEdge(new Edge(pta.parameterize(rm, pta.emptyContext()), stmtMap.get(heapOrType), callee, kind));
+            handleCallEdge(new Edge(pta.parameterize(rm, pta.emptyContext()), stmtMap.get(heapOrType), callee, kind), rmQueue);
         }
     }
 
-    public void addStaticEdge(MethodOrMethodContext caller, Unit callStmt, SootMethod calleem, Kind kind) {
+    public void addStaticEdge(MethodOrMethodContext caller, Unit callStmt, SootMethod calleem, Kind kind, ChunkedQueue<MethodOrMethodContext> rmQueue) {
         Context typeContext = pta.createCalleeCtx(caller, null, new CallSite(callStmt), calleem);
         MethodOrMethodContext callee = pta.parameterize(calleem, typeContext);
-        handleCallEdge(new Edge(caller, callStmt, callee, kind));
+        handleCallEdge(new Edge(caller, callStmt, callee, kind), rmQueue);
     }
 
-    protected void handleCallEdge(Edge edge) {
+    protected void handleCallEdge(Edge edge, ChunkedQueue<MethodOrMethodContext> rmQueue) {
         if (calledges.add(edge)) {
             MethodOrMethodContext callee = edge.getTgt();
             if (reachMethods.add(callee)) {
@@ -187,14 +179,14 @@ public class CallGraphBuilder {
     }
 
     public boolean recordVirtualCallSite(VarNode receiver, VirtualCallSite site) {
-        Collection<VirtualCallSite> sites = receiverToSites.computeIfAbsent(receiver, k -> DataFactory.createSet());
+        Collection<VirtualCallSite> sites = receiverToSites.computeIfAbsent(receiver, k -> DataFactory.createConcurrentSet());
         return sites.add(site);
     }
 
-    public void virtualCallDispatch(PointsToSetInternal p2set, VirtualCallSite site) {
+    public void virtualCallDispatch(PointsToSetInternal p2set, VirtualCallSite site, ChunkedQueue<MethodOrMethodContext> rmQueue) {
         p2set.forall(new P2SetVisitor(pta) {
             public void visit(Node n) {
-                dispatch((AllocNode) n, site);
+                dispatch((AllocNode) n, site, rmQueue);
             }
         });
     }

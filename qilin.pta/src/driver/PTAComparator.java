@@ -20,6 +20,7 @@ package driver;
 
 import qilin.core.PTA;
 import qilin.core.pag.AllocNode;
+import qilin.core.pag.LocalVarNode;
 import qilin.core.pag.PAG;
 import qilin.core.pag.VarNode;
 import qilin.core.sets.PointsToSet;
@@ -122,7 +123,12 @@ public class PTAComparator {
                     if (verbose) {
                         out.println("\nPoint-to sets not equal!");
                         if (val instanceof Local) {
-                            out.println("local: " + pag.findLocalVarNode(val).getMethod() + ": " + val);
+                            LocalVarNode lvn = pag.findLocalVarNode(val);
+                            if (lvn == null) {
+                                out.println("local: " + "NULL?" + ": " + val);
+                            } else {
+                                out.println("local: " + lvn.getMethod() + ": " + val);
+                            }
                         } else {
                             out.println("not local: " + pag.findValNode(val) + ": " + val);
                         }

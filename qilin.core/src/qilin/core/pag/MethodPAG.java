@@ -41,14 +41,14 @@ import java.util.*;
 public class MethodPAG {
     private final ChunkedQueue<Node> internalEdges = new ChunkedQueue<>();
     private final QueueReader<Node> internalReader = internalEdges.reader();
-    private final Set<SootMethod> clinits = DataFactory.createSet();
-    private final Collection<Unit> invokeStmts = DataFactory.createSet();
+    private final Set<SootMethod> clinits = DataFactory.createConcurrentSet();
+    private final Collection<Unit> invokeStmts = DataFactory.createConcurrentSet();
     public Body body;
     /**
      * Since now the exception analysis is handled on-the-fly, we should record the
      * exception edges explicitly for Eagle and Turner.
      */
-    private final Map<Node, Set<Node>> exceptionEdges = DataFactory.createMap();
+    private final Map<Node, Set<Node>> exceptionEdges = DataFactory.createConcurrentMap();
     protected MethodNodeFactory nodeFactory;
     SootMethod method;
     /*
@@ -180,8 +180,13 @@ public class MethodPAG {
         if (src == null) {
             return;
         }
-        internalEdges.add(src);
-        internalEdges.add(dst);
+        if (dst == null) {
+            throw new IllegalArgumentException("dst is null");
+        }
+        synchronized (internalEdges) {
+            internalEdges.add(src);
+            internalEdges.add(dst);
+        }
     }
 
     public QueueReader<Node> getInternalReader() {
@@ -197,7 +202,7 @@ public class MethodPAG {
     }
 
     public void addExceptionEdge(Node from, Node to) {
-        this.exceptionEdges.computeIfAbsent(from, k -> DataFactory.createSet()).add(to);
+        this.exceptionEdges.computeIfAbsent(from, k -> DataFactory.createConcurrentSet()).add(to);
     }
 
     public Map<Node, Set<Node>> getExceptionEdges() {

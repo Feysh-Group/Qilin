@@ -58,7 +58,8 @@ public class AliasStat implements AbstractStat {
             MethodPAG srcmpag = pta.getPag().getMethodPAG(m);
             QueueReader<Node> reader = srcmpag.getInternalReader().clone();
             while (reader.hasNext()) {
-                Node from = reader.next(), to = reader.next();
+                Node from = reader.next();
+                Node to = reader.next();
                 if (from instanceof LocalVarNode) {
                     if (to instanceof LocalVarNode) {
                         if (!(((VarNode) from).getVariable() instanceof Local))
@@ -132,9 +133,7 @@ public class AliasStat implements AbstractStat {
     }
 
     private boolean checkAlias(LocalVarNode l1, LocalVarNode l2) {
-        PointsToSet pts1 = pta.reachingObjects((Local) l1.getVariable());
-        PointsToSet pts2 = pta.reachingObjects((Local) l2.getVariable());
-        return pts1.hasNonEmptyIntersection(pts2);
+        return pta.hasNonEmptyIntersection((Local) l1.getVariable(), (Local) l2.getVariable());
     }
 
     public static <K, T, V> boolean addToMap(Map<K, Map<T, Set<V>>> m, K key1, T key2, V value) {

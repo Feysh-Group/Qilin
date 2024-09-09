@@ -89,6 +89,8 @@ public class CoreConfig {
         public boolean enforceEmptyCtxForIgnoreTypes = false;
 
         public String ptaName;
+
+        public boolean printAliasInfo = true; // 性能消耗很高
     }
 
     public static class ApplicationConfiguration {

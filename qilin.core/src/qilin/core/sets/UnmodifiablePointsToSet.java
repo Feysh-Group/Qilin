@@ -18,13 +18,16 @@
 
 package qilin.core.sets;
 
+import com.google.common.collect.Sets;
 import qilin.core.PTA;
 import qilin.core.pag.*;
 import soot.RefType;
 import soot.Type;
 import soot.jimple.ClassConstant;
+import soot.util.ArraySet;
 
 import java.util.*;
+import java.util.function.Function;
 
 public class UnmodifiablePointsToSet implements PointsToSet {
     private final PointsToSetInternal pts;
@@ -170,13 +173,23 @@ public class UnmodifiablePointsToSet implements PointsToSet {
         return new UnmodifiablePointsToSet(pta, ptoSet);
     }
 
+
     @Override
-    public Collection<AllocNode> toCollection() {
-        Set<AllocNode> ret = new HashSet<>();
+    public Set<AllocNode> toCollection() {
+        Set<AllocNode> ret = Sets.newHashSetWithExpectedSize(size());
         for (Iterator<AllocNode> it = iterator(); it.hasNext(); ) {
             ret.add(it.next());
         }
         return ret;
+    }
+
+    @Override
+    public <T, C extends Collection<T>> C toCollection(C to, Function<AllocNode, ? extends T> mapper) {
+        Iterator<AllocNode> it = this.iterator();
+        while (it.hasNext()) {
+            to.add(mapper.apply(it.next()));
+        }
+        return to;
     }
 
     /**

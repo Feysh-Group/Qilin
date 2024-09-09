@@ -19,6 +19,7 @@
 package qilin.util;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class DataFactory {
     public static <T> List<T> createList() {
@@ -29,6 +30,14 @@ public class DataFactory {
     public static <T> Set<T> createSet() {
         return new HashSet<>();
 //        return ConcurrentHashMap.newKeySet();
+    }
+
+    public static <T> Set<T> createConcurrentSet(int initCapacity) {
+        return Collections.newSetFromMap(new ConcurrentHashMap<>(initCapacity));
+    }
+
+    public static <T> Set<T> createConcurrentSet() {
+        return Collections.newSetFromMap(new ConcurrentHashMap<>());
     }
 
     public static <T> Set<T> createSet(int initCapacity) {
@@ -44,5 +53,14 @@ public class DataFactory {
     public static <K, V> Map<K, V> createMap(int initCapacity) {
         return new HashMap<>(initCapacity);
 //        return new ConcurrentHashMap<>(initCapacity);
+    }
+
+    public static <K, V> ConcurrentHashMap<K, V> createConcurrentMap(int initCapacity) {
+        return new ConcurrentHashMap<>(initCapacity);
+    }
+
+
+    public static <K, V> ConcurrentHashMap<K, V> createConcurrentMap() {
+        return new ConcurrentHashMap<>();
     }
 }

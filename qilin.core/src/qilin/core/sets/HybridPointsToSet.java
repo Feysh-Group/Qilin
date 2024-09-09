@@ -22,6 +22,7 @@ import soot.util.BitSetIterator;
 import soot.util.BitVector;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Iterator;
 
 /**
@@ -39,7 +40,7 @@ public final class HybridPointsToSet extends PointsToSetInternal {
         return emptySet;
     }
 
-    private final int[] nodeIdxs = new int[16];
+    private int[] nodeIdxs;
     private BitVector bits = null;
     private int size = 0;
 
@@ -55,7 +56,9 @@ public final class HybridPointsToSet extends PointsToSetInternal {
 
     @Override
     public void clear() {
-        Arrays.fill(nodeIdxs, 0);
+        if (nodeIdxs != null) {
+            Arrays.fill(nodeIdxs, 0);
+        }
         bits = null;
         empty = true;
         size = 0;
@@ -118,6 +121,9 @@ public final class HybridPointsToSet extends PointsToSetInternal {
 
     @Override
     public Iterator<Integer> iterator() {
+        if (bits == null && nodeIdxs == null) {
+            return Collections.emptyIterator();
+        }
         return new HybridPTSIterator();
     }
 
@@ -131,6 +137,9 @@ public final class HybridPointsToSet extends PointsToSetInternal {
      */
     public boolean forall(P2SetVisitor v) {
         if (bits == null) {
+            if (nodeIdxs == null) {
+                return v.getReturnValue();
+            }
             for (int nodeIdx : nodeIdxs) {
                 if (nodeIdx == 0) {
                     return v.getReturnValue();
@@ -150,6 +159,9 @@ public final class HybridPointsToSet extends PointsToSetInternal {
      */
     public boolean contains(int idx) {
         if (bits == null) {
+            if (nodeIdxs == null) {
+                return false;
+            }
             for (int nodeIdx : nodeIdxs) {
                 if (idx == nodeIdx) {
                     return true;
@@ -169,6 +181,9 @@ public final class HybridPointsToSet extends PointsToSetInternal {
      */
     public boolean add(int idx) {
         if (bits == null) {
+            if (nodeIdxs == null) {
+                nodeIdxs = new int[16];
+            }
             for (int i = 0; i < nodeIdxs.length; i++) {
                 if (nodeIdxs[i] == 0) {
                     empty = false;
@@ -186,6 +201,7 @@ public final class HybridPointsToSet extends PointsToSetInternal {
                     bits.set(nodeIdx);
                 }
             }
+            nodeIdxs = null;
         }
         boolean ret = bits.set(idx);
         if (ret) {
@@ -195,4 +211,11 @@ public final class HybridPointsToSet extends PointsToSetInternal {
         return ret;
     }
 
+    public int[] getNodeIdxs() {
+        assert size <= 16;
+        if (nodeIdxs == null) {
+            return new int [0];
+        }
+        return nodeIdxs;
+    }
 }
