@@ -109,6 +109,9 @@ public class PointsToStat implements AbstractStat {
                 if (!global.isStatic())
                     continue;
                 GlobalVarNode gvn = pag.findGlobalVarNode(global);
+                if (gvn == null) {
+                    continue;
+                }
                 boolean app = gvn.getDeclaringClass().isApplicationClass();
 
                 totalGlobalPointers++;
@@ -134,7 +137,7 @@ public class PointsToStat implements AbstractStat {
             try {
                 Collection<VarNode> varNodes = pag.getVarNodes(local);
                 LocalVarNode lvn = pag.findLocalVarNode(local);
-                if (local.toString().contains("intermediate/")) {
+                if (lvn == null || local.toString().contains("intermediate/")) {
                     continue;
                 }
                 mLocalVarNodes.add(lvn);

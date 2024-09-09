@@ -134,7 +134,7 @@ public class SimplifiedEvaluator implements IEvaluator {
         for (Local local : pag.getLocalPointers()) {
             try {
                 LocalVarNode lvn = pag.findLocalVarNode(local);
-                if (local.toString().contains("intermediate/")) {
+                if (lvn == null || local.toString().contains("intermediate/")) {
                     continue;
                 }
                 mLocalVarNodes.add(lvn);

@@ -38,6 +38,7 @@ import soot.jimple.internal.JimpleLocal;
 import soot.jimple.spark.pag.SparkField;
 import soot.util.ArrayNumberer;
 
+import javax.annotation.Nullable;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -518,7 +519,11 @@ public class PAG {
     }
 
     public Collection<VarNode> getVarNodes(Local local) {
-        Map<?, ContextVarNode> subMap = contextVarNodeMap.get(findLocalVarNode(local));
+        LocalVarNode lvn = findLocalVarNode(local);
+        if (lvn == null) {
+            return Collections.emptyList();
+        }
+        Map<?, ContextVarNode> subMap = contextVarNodeMap.get(lvn);
         if (subMap == null) {
             return Collections.emptySet();
         }
@@ -530,14 +535,14 @@ public class PAG {
     /**
      * Finds the GlobalVarNode for the variable value, or returns null.
      */
-    public GlobalVarNode findGlobalVarNode(Object value) {
+    @Nullable public GlobalVarNode findGlobalVarNode(Object value) {
         return (GlobalVarNode) findValNode(value);
     }
 
     /**
      * Finds the LocalVarNode for the variable value, or returns null.
      */
-    public LocalVarNode findLocalVarNode(Object value) {
+    @Nullable public LocalVarNode findLocalVarNode(Object value) {
         ValNode ret = findValNode(value);
         if (ret instanceof LocalVarNode) {
             return (LocalVarNode) ret;
@@ -549,8 +554,12 @@ public class PAG {
      * Finds the ContextVarNode for base variable value and context context, or
      * returns null.
      */
-    public ContextVarNode findContextVarNode(Local baseValue, Context context) {
-        Map<Context, ContextVarNode> contextMap = contextVarNodeMap.get(findLocalVarNode(baseValue));
+    @Nullable public ContextVarNode findContextVarNode(Local baseValue, Context context) {
+        LocalVarNode baseValueNode = findLocalVarNode(baseValue);
+        if (baseValueNode == null) {
+            return null;
+        }
+        Map<Context, ContextVarNode> contextMap = contextVarNodeMap.get(baseValueNode);
         return contextMap == null ? null : contextMap.get(context);
     }
 
