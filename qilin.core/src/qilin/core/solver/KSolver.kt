@@ -43,6 +43,7 @@ import soot.jimple.toolkits.callgraph.Edge
 import soot.options.Options
 import soot.util.queue.ChunkedQueue
 import java.util.*
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.ConcurrentSkipListSet
 import kotlin.collections.HashSet
 import kotlin.math.max
@@ -346,27 +347,55 @@ class KSolver(pta: PTA) : Propagator() {
         })
     }
 
+    private fun propagateEdge(addedSrc: Node, addedTgt: Node) {
+        if (addedSrc is VarNode && addedTgt is VarNode || addedSrc is ContextField || addedTgt is ContextField) {
+            // x = y; x = o.f; o.f = y;
+            val srcv = addedSrc as ValNode
+            val tgtv = addedTgt as ValNode
+            propagatePTS(tgtv, srcv.p2Set.oldSet)
+        } else if (addedSrc is FieldRefNode) { // b = a.f
+            handleLoadEdge(addedSrc.base.p2Set.oldSet, addedSrc.field, addedTgt as ValNode)
+        } else if (addedTgt is FieldRefNode) { // a.f = b;
+            handleStoreEdge(addedTgt.base.p2Set.oldSet, addedTgt.field, addedSrc as ValNode)
+        } else if (addedSrc is AllocNode) { // alloc x = new T;
+            propagatePTS(addedTgt as VarNode, addedSrc)
+        }
+    }
 
-    private fun propagateAddedEdges(addedEdges: Queue<Pair<Node, Node>>) {
+    private suspend fun propagateAddedEdges(addedEdges: Queue<Pair<Node, Node>>) {
         /*
          * there are some actual parameter to formal parameter edges whose source nodes are not in the worklist.
          * For this case, we should use the following loop to update the target nodes and insert the
          * target nodes into the worklist if nesseary.
          * */
+        val loopEdges = ConcurrentLinkedQueue<Pair<Node, Node>>()
+        coroutineScope {
+            while (addedEdges.isNotEmpty()) {
+                val flow = addedEdges.poll()
+                val (addedSrc, addedTgt) = flow
+                launch {
+                    try {
+                        if (noBackEdgeGraph.addEdgeSynchronized(addedSrc, addedTgt)) {
+                            synchronized(addedSrc) {
+                                synchronized(addedTgt) {
+                                    propagateEdge(addedSrc, addedTgt)
+                                }
+                            }
+                        } else {
+                            loopEdges += flow
+                        }
+                    } finally {
+                        noBackEdgeGraph.removeEdgeSynchronized(addedSrc, addedTgt)
+                    }
+                }
+            }
+        }
+        for ((addedSrc, addedTgt) in loopEdges) {
+            propagateEdge(addedSrc, addedTgt)
+        }
         while (addedEdges.isNotEmpty()) {
             val (addedSrc, addedTgt) = addedEdges.poll()
-            if (addedSrc is VarNode && addedTgt is VarNode || addedSrc is ContextField || addedTgt is ContextField
-            ) { // x = y; x = o.f; o.f = y;
-                val srcv = addedSrc as ValNode
-                val tgtv = addedTgt as ValNode
-                propagatePTS(tgtv, srcv.p2Set.oldSet)
-            } else if (addedSrc is FieldRefNode) { // b = a.f
-                handleLoadEdge(addedSrc.base.p2Set.oldSet, addedSrc.field, addedTgt as ValNode)
-            } else if (addedTgt is FieldRefNode) { // a.f = b;
-                handleStoreEdge(addedTgt.base.p2Set.oldSet, addedTgt.field, addedSrc as ValNode)
-            } else if (addedSrc is AllocNode) { // alloc x = new T;
-                propagatePTS(addedTgt as VarNode, addedSrc)
-            }
+            propagateEdge(addedSrc, addedTgt)
         }
     }
 
