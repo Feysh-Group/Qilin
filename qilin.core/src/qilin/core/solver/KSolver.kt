@@ -20,6 +20,8 @@ package qilin.core.solver
 import com.google.common.collect.Queues
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import qilin.CoreConfig
 import qilin.core.PTA
 import qilin.core.PTAScene
@@ -108,6 +110,8 @@ class KSolver(pta: PTA) : Propagator() {
         return dispatcher
     }
 
+    private val semaphore: Semaphore = Semaphore(concurrency * 3)
+
     override fun propagate() {
         val rmpInit = ReachableMethodProcessor()
         rmpInit.initReachableMethods()
@@ -128,8 +132,10 @@ class KSolver(pta: PTA) : Propagator() {
                     while (valNodeWorkList.isNotEmpty()) {
                         val curr = checkNotNull(valNodeWorkList.pollFirst())
                         launch {
-                            synchronized(curr) {
-                                process(curr)
+                            semaphore.withPermit {
+                                synchronized(curr) {
+                                    process(curr)
+                                }
                             }
                         }
                     }
@@ -374,18 +380,20 @@ class KSolver(pta: PTA) : Propagator() {
                 val flow = addedEdges.poll()
                 val (addedSrc, addedTgt) = flow
                 launch {
-                    try {
-                        if (noBackEdgeGraph.addEdgeSynchronized(addedSrc, addedTgt)) {
-                            synchronized(addedSrc) {
-                                synchronized(addedTgt) {
-                                    propagateEdge(addedSrc, addedTgt)
+                    semaphore.withPermit {
+                        try {
+                            if (noBackEdgeGraph.addEdgeSynchronized(addedSrc, addedTgt)) {
+                                synchronized(addedSrc) {
+                                    synchronized(addedTgt) {
+                                        propagateEdge(addedSrc, addedTgt)
+                                    }
                                 }
+                            } else {
+                                loopEdges += flow
                             }
-                        } else {
-                            loopEdges += flow
+                        } finally {
+                            noBackEdgeGraph.removeEdgeSynchronized(addedSrc, addedTgt)
                         }
-                    } finally {
-                        noBackEdgeGraph.removeEdgeSynchronized(addedSrc, addedTgt)
                     }
                 }
             }
