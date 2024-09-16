@@ -36,10 +36,7 @@ import qilin.core.sets.PointsToSetInternal
 import qilin.util.PTAUtils
 import soot.*
 import soot.Unit
-import soot.jimple.DynamicInvokeExpr
-import soot.jimple.InstanceInvokeExpr
-import soot.jimple.Stmt
-import soot.jimple.ThrowStmt
+import soot.jimple.*
 import soot.jimple.spark.pag.SparkField
 import soot.jimple.toolkits.callgraph.Edge
 import soot.options.Options
@@ -47,7 +44,6 @@ import soot.util.queue.ChunkedQueue
 import java.util.*
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.ConcurrentSkipListSet
-import kotlin.collections.HashSet
 import kotlin.math.max
 
 class KSolver(pta: PTA) : Propagator() {
@@ -60,8 +56,10 @@ class KSolver(pta: PTA) : Propagator() {
     private val cgb: CallGraphBuilder = pta.cgb
     private val eh: ExceptionHandler
     private val edgeQueue: Queue<Pair<Node, Node>>
+    private val phantomParentClasses: Set<SootClass>
 
     private val noBackEdgeGraph: NoBackEdgeDirectGraph<Node> = NoBackEdgeDirectGraph()
+    private val castNeverFailsOfPhantomClass = CoreConfig.v().ptaConfig.castNeverFailsOfPhantomClass
 
     init {
         edgeQueue = Queues.newConcurrentLinkedQueue()
@@ -69,6 +67,19 @@ class KSolver(pta: PTA) : Propagator() {
         pag.setEdgeQueue(edgeQueue)
         this.eh = pta.exceptionHandler
         this.pta = pta
+        val fastHierarchy = Scene.v().orMakeFastHierarchy
+        val phantomChildClasses = mutableSetOf<SootClass>()
+        if (castNeverFailsOfPhantomClass) {
+            for (phantomClass in Scene.v().phantomClasses) {
+                phantomChildClasses.add(phantomClass)
+                if (phantomClass.isInterface) {
+                    phantomChildClasses.addAll(fastHierarchy.getAllImplementersOfInterface(phantomClass))
+                } else {
+                    phantomChildClasses.addAll(fastHierarchy.getSubclassesOf(phantomClass))
+                }
+            }
+        }
+        this.phantomParentClasses = phantomChildClasses
     }
 
     private var iterCnt = 0
@@ -426,6 +437,32 @@ class KSolver(pta: PTA) : Propagator() {
         }
     }
 
+    private fun checkTypeHierarchyIsPhantom(type: Type): Boolean {
+        if (type is ArrayType) {
+            return checkTypeHierarchyIsPhantom(type.elementType)
+        } else if (type is RefType) {
+            if (!type.hasSootClass()) {
+                return false
+            }
+            return phantomParentClasses.contains(type.sootClass)
+        }
+        return false
+    }
+
+    fun canStore(fromType: Type, dst: ValNode): Boolean {
+        val toType = dst.type
+        if (PTAUtils.castNeverFails(fromType, toType)) {
+            return true
+        }
+        if (castNeverFailsOfPhantomClass) {
+            val toTypeIsPhantom = checkTypeHierarchyIsPhantom(toType)
+            val fromTypeIsPhantom = checkTypeHierarchyIsPhantom(fromType)
+            if (toTypeIsPhantom || fromTypeIsPhantom) {
+                return true
+            }
+        }
+        return false
+    }
 
     protected fun propagatePTS(next: ValNode, newSet: HybridPointsToSet) {
         val sz = newSet.size()
@@ -441,14 +478,13 @@ class KSolver(pta: PTA) : Propagator() {
             return
         }
         val addTo = next.p2Set
-        val toType = next.type
         val p2SetVisitor: P2SetVisitor = object : P2SetVisitor(pta) {
             val castNeverFailsCache = IdentityHashMap<Type, Boolean>(ExpectedSize.capacity(16))
             public override fun visit(node: Node) {
                 val nodeType: Type = node.type
                 var b = castNeverFailsCache[nodeType]
                 if (b == null) {
-                    b = PTAUtils.castNeverFails(nodeType, toType)
+                    b = canStore(nodeType, next)
                     castNeverFailsCache[nodeType] = b
                 }
                 if (b && addTo.add(node.number)) {
@@ -462,9 +498,11 @@ class KSolver(pta: PTA) : Propagator() {
         }
     }
 
-    protected fun propagatePTS(pointer: ValNode, heap: AllocNode) {
-        if (PTAUtils.addWithTypeFiltering(pointer.p2Set, pointer.type, heap)) {
-            valNodeWorkList.add(pointer)
+    protected fun propagatePTS(next: ValNode, heap: AllocNode) {
+        if (canStore(heap.type, next)) {
+            if (next.p2Set.add(heap.number)) {
+                valNodeWorkList.add(next)
+            }
         }
     }
 
