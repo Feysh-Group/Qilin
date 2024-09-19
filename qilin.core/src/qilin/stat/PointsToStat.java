@@ -26,7 +26,6 @@ import qilin.core.sets.ExpectedSize;
 import qilin.core.sets.PointsToSet;
 import qilin.util.PTAUtils;
 import soot.*;
-import soot.util.ArraySet;
 
 import java.util.*;
 

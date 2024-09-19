@@ -24,7 +24,6 @@ import qilin.core.pag.*;
 import soot.RefType;
 import soot.Type;
 import soot.jimple.ClassConstant;
-import soot.util.ArraySet;
 
 import java.util.*;
 import java.util.function.Function;

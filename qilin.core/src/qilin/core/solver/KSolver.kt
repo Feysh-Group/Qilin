@@ -29,7 +29,6 @@ import qilin.core.builder.CallGraphBuilder
 import qilin.core.builder.ExceptionHandler
 import qilin.core.graph.NoBackEdgeDirectGraph
 import qilin.core.pag.*
-import qilin.core.sets.ExpectedSize
 import qilin.core.sets.HybridPointsToSet
 import qilin.core.sets.P2SetVisitor
 import qilin.core.sets.PointsToSetInternal
@@ -40,8 +39,10 @@ import soot.jimple.*
 import soot.jimple.spark.pag.SparkField
 import soot.jimple.toolkits.callgraph.Edge
 import soot.options.Options
+import soot.util.SparseBitSet
 import soot.util.queue.ChunkedQueue
 import java.util.*
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.ConcurrentSkipListSet
 import kotlin.math.max
@@ -60,6 +61,7 @@ class KSolver(pta: PTA) : Propagator() {
 
     private val noBackEdgeGraph: NoBackEdgeDirectGraph<Node> = NoBackEdgeDirectGraph()
     private val castNeverFailsOfPhantomClass = CoreConfig.v().ptaConfig.castNeverFailsOfPhantomClass
+    private val canStoreCache: ConcurrentHashMap<Type, SparseBitSet> = ConcurrentHashMap()
 
     init {
         edgeQueue = Queues.newConcurrentLinkedQueue()
@@ -130,7 +132,8 @@ class KSolver(pta: PTA) : Propagator() {
 
         pag.alloc.forEach { (a: AllocNode, set: Set<VarNode>) ->
             set.forEach { v: VarNode ->
-                propagatePTS(v, a)
+                val canStoreCacheBitSet = canStoreCache.getOrPut(v.type) { SparseBitSet() }
+                propagatePTS(canStoreCacheBitSet, v, a)
             }
         }
 
@@ -163,6 +166,7 @@ class KSolver(pta: PTA) : Propagator() {
             }
         }
         println("PAG: $pag iterate count: $iterCnt")
+        canStoreCache.clear()
     }
 
 
@@ -375,7 +379,7 @@ class KSolver(pta: PTA) : Propagator() {
         } else if (addedTgt is FieldRefNode) { // a.f = b;
             handleStoreEdge(addedTgt.base.p2Set.oldSet, addedTgt.field, addedSrc as ValNode)
         } else if (addedSrc is AllocNode) { // alloc x = new T;
-            propagatePTS(addedTgt as VarNode, addedSrc)
+            propagatePTS(null, addedTgt as VarNode, addedSrc)
         }
     }
 
@@ -449,13 +453,30 @@ class KSolver(pta: PTA) : Propagator() {
         return false
     }
 
-    fun canStore(fromType: Type, dst: ValNode): Boolean {
-        val toType = dst.type
-        if (PTAUtils.castNeverFails(fromType, toType)) {
+    fun canStore(canStoreCacheBitSet: SparseBitSet?, fromType: Type, dstType: Type): Boolean {
+        val number = fromType.number
+        val canStore: Boolean
+        if (number <= 0 || canStoreCacheBitSet == null) {
+            canStore = PTAUtils.castNeverFails(fromType, dstType)
+        } else {
+            val existsIndex = number * 2
+            val canStoreIndex = existsIndex + 1
+            if (!canStoreCacheBitSet.get(existsIndex)) {
+                canStore = PTAUtils.castNeverFails(fromType, dstType)
+                if (canStore) {
+                    canStoreCacheBitSet.set(canStoreIndex)
+                }
+                canStoreCacheBitSet.set(existsIndex)
+            } else {
+                canStore = canStoreCacheBitSet.get(canStoreIndex)
+            }
+        }
+
+        if (canStore) {
             return true
         }
         if (castNeverFailsOfPhantomClass) {
-            val toTypeIsPhantom = checkTypeHierarchyIsPhantom(toType)
+            val toTypeIsPhantom = checkTypeHierarchyIsPhantom(dstType)
             val fromTypeIsPhantom = checkTypeHierarchyIsPhantom(fromType)
             if (toTypeIsPhantom || fromTypeIsPhantom) {
                 return true
@@ -464,30 +485,28 @@ class KSolver(pta: PTA) : Propagator() {
         return false
     }
 
+
     protected fun propagatePTS(next: ValNode, newSet: HybridPointsToSet) {
         val sz = newSet.size()
         if (sz == 0) {
             return
         }
+        val dstType = next.type
+        val canStoreCacheBitSet = canStoreCache.getOrPut(next.type) { SparseBitSet() }
         if (sz <= 2) {
             val allocNodeNumberer = pag.allocNodeNumberer
             for (node in newSet.nodeIdxs) {
                 if (node == 0) break
-                propagatePTS(next, allocNodeNumberer.get(node.toLong()))
+                propagatePTS(canStoreCacheBitSet, next, allocNodeNumberer.get(node.toLong()))
             }
             return
         }
         val addTo = next.p2Set
         val p2SetVisitor: P2SetVisitor = object : P2SetVisitor(pta) {
-            val castNeverFailsCache = IdentityHashMap<Type, Boolean>(ExpectedSize.capacity(16))
             public override fun visit(node: Node) {
                 val nodeType: Type = node.type
-                var b = castNeverFailsCache[nodeType]
-                if (b == null) {
-                    b = canStore(nodeType, next)
-                    castNeverFailsCache[nodeType] = b
-                }
-                if (b && addTo.add(node.number)) {
+                val canStore = canStore(canStoreCacheBitSet, nodeType, dstType)
+                if (canStore && addTo.add(node.number)) {
                     returnValue = true
                 }
             }
@@ -498,11 +517,10 @@ class KSolver(pta: PTA) : Propagator() {
         }
     }
 
-    protected fun propagatePTS(next: ValNode, heap: AllocNode) {
-        if (canStore(heap.type, next)) {
-            if (next.p2Set.add(heap.number)) {
-                valNodeWorkList.add(next)
-            }
+    protected fun propagatePTS(canStoreCacheBitSet: SparseBitSet?, next: ValNode, heap: AllocNode) {
+        val canStore = canStore(canStoreCacheBitSet, heap.type, next.type)
+        if (canStore && next.p2Set.add(heap.number)) {
+            valNodeWorkList.add(next)
         }
     }
 

@@ -34,7 +34,6 @@ import soot.*;
 import soot.jimple.*;
 import soot.jimple.toolkits.callgraph.CallGraph;
 import soot.jimple.toolkits.callgraph.Edge;
-import soot.util.ArraySet;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
