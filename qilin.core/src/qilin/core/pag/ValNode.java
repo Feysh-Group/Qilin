@@ -19,21 +19,25 @@
 package qilin.core.pag;
 
 import qilin.core.sets.DoublePointsToSet;
+import qilin.core.sets.HybridPointsToSet;
+import qilin.core.sets.RoaringPointsToSet;
 import soot.Type;
 import soot.util.Numberable;
 
 /**
  * Represents a simple of pointer node in the pointer assignment graph.
  */
-public class ValNode extends Node implements Comparable, Numberable {
+public class ValNode extends Node implements Comparable<ValNode>, Numberable {
+
+    public static boolean UseRoaringPointsToSet = false;
 
     protected ValNode(Type t) {
         super(t);
     }
 
-    public int compareTo(Object o) {
-        ValNode other = (ValNode) o;
-        return other.getNumber() - this.getNumber();
+    @Override
+    public int compareTo(ValNode o) {
+        return o.getNumber() - this.getNumber();
     }
 
     /**
@@ -43,9 +47,14 @@ public class ValNode extends Node implements Comparable, Numberable {
         if (p2set != null) {
             return p2set;
         } else {
-            p2set = new DoublePointsToSet();
+            p2set = UseRoaringPointsToSet ? new DoublePointsToSet(new RoaringPointsToSet(), new RoaringPointsToSet())
+                    : new DoublePointsToSet();
             return p2set;
         }
+    }
+
+    public DoublePointsToSet getP2SetOrNull() {
+        return p2set;
     }
 
     /**

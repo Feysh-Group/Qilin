@@ -27,12 +27,17 @@ import java.util.Iterator;
  * @author Ondrej Lhotak
  */
 public class DoublePointsToSet extends PointsToSetInternal {
-    protected HybridPointsToSet newSet;
-    protected HybridPointsToSet oldSet;
+    protected PointsToSetInternal newSet;
+    protected PointsToSetInternal oldSet;
 
     public DoublePointsToSet() {
         newSet = new HybridPointsToSet();
         oldSet = new HybridPointsToSet();
+    }
+
+    public DoublePointsToSet(PointsToSetInternal newSet, PointsToSetInternal oldSet) {
+        this.newSet = newSet;
+        this.oldSet = oldSet;
     }
 
     /**
@@ -90,11 +95,11 @@ public class DoublePointsToSet extends PointsToSetInternal {
     /**
      * Adds contents of other into this set, returns true if this set changed.
      */
-    public boolean addAll(PointsToSetInternal other, PointsToSetInternal exclude) {
+    public void addAll(PointsToSetInternal other, PointsToSetInternal exclude) {
         if (exclude != null) {
             throw new RuntimeException("exclude set must be null.");
         }
-        return newSet.addAll(other, oldSet);
+        newSet.addAll(other, oldSet);
     }
 
     /**
@@ -120,14 +125,14 @@ public class DoublePointsToSet extends PointsToSetInternal {
     /**
      * Returns set of nodes already present before last call to flushNew.
      */
-    public HybridPointsToSet getOldSet() {
+    public PointsToSetInternal getOldSet() {
         return oldSet;
     }
 
     /**
      * Returns set of newly-added nodes since last call to flushNew.
      */
-    public HybridPointsToSet getNewSet() {
+    public PointsToSetInternal getNewSet() {
         return newSet;
     }
 
@@ -151,5 +156,12 @@ public class DoublePointsToSet extends PointsToSetInternal {
     @Override
     public boolean contains(int idx) {
         return oldSet.contains(idx) || newSet.contains(idx);
+    }
+
+    @Override
+    public PointsToSetInternal lessMem() {
+        this.oldSet = this.oldSet.lessMem();
+        this.newSet = this.newSet.lessMem();
+        return this;
     }
 }

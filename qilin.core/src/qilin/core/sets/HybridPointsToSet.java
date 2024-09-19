@@ -18,8 +18,10 @@
 
 package qilin.core.sets;
 
+import org.roaringbitmap.RoaringBitmap;
 import soot.util.BitSetIterator;
 import soot.util.BitVector;
+import soot.util.SparseBitSet;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -41,7 +43,7 @@ public final class HybridPointsToSet extends PointsToSetInternal {
     }
 
     private int[] nodeIdxs;
-    private BitVector bits = null;
+    private SparseBitSet bits = null;
     private int size = 0;
 
     private boolean empty = true;
@@ -64,28 +66,28 @@ public final class HybridPointsToSet extends PointsToSetInternal {
         size = 0;
     }
 
-    private boolean nativeAddAll(HybridPointsToSet other, PointsToSetInternal exclude) {
-        boolean ret = false;
+    private void nativeAddAll(PointsToSetInternal other, PointsToSetInternal exclude) {
         for (Iterator<Integer> it = other.iterator(); it.hasNext(); ) {
             int idx = it.next();
             if (exclude == null || !exclude.contains(idx)) {
-                ret |= add(idx);
+                add(idx);
             }
         }
-        return ret;
     }
 
     /**
      * Adds contents of other into this set, returns true if this set changed.
      */
-    public boolean addAll(final PointsToSetInternal other, final PointsToSetInternal exclude) {
+    public void addAll(final PointsToSetInternal other, final PointsToSetInternal exclude) {
         if (other == null) {
-            return false;
+            return;
         }
         if (other instanceof DoublePointsToSet dpts) {
-            return nativeAddAll(dpts.getNewSet(), exclude) | nativeAddAll(dpts.getOldSet(), exclude);
+            nativeAddAll(dpts.getNewSet(), exclude);
+            nativeAddAll(dpts.getOldSet(), exclude);
+            return;
         }
-        return nativeAddAll((HybridPointsToSet) other, exclude);
+        nativeAddAll(other, exclude);
     }
 
     private class HybridPTSIterator implements Iterator<Integer> {
@@ -96,7 +98,7 @@ public final class HybridPointsToSet extends PointsToSetInternal {
             if (bits == null) {
                 idx = 0;
             } else {
-                it = bits.iterator();
+                it = new BitSetIterator(bits);
             }
         }
 
@@ -147,7 +149,7 @@ public final class HybridPointsToSet extends PointsToSetInternal {
                 v.visit(nodeIdx);
             }
         } else {
-            for (BitSetIterator it = bits.iterator(); it.hasNext(); ) {
+            for (BitSetIterator it = new BitSetIterator(bits); it.hasNext(); ) {
                 v.visit(it.next());
             }
         }
@@ -195,7 +197,7 @@ public final class HybridPointsToSet extends PointsToSetInternal {
                 }
             }
             // convert to Bits
-            bits = new BitVector();
+            bits = new SparseBitSet();
             for (int nodeIdx : nodeIdxs) {
                 if (nodeIdx != 0) {
                     bits.set(nodeIdx);
@@ -211,11 +213,11 @@ public final class HybridPointsToSet extends PointsToSetInternal {
         return ret;
     }
 
-    public int[] getNodeIdxs() {
-        assert size <= 16;
-        if (nodeIdxs == null) {
-            return new int [0];
+    public PointsToSetInternal lessMem() {
+        RoaringPointsToSet ret = new RoaringPointsToSet();
+        for (Iterator<Integer> it = this.iterator(); it.hasNext(); ) {
+            ret.add(it.next());
         }
-        return nodeIdxs;
+        return ret;
     }
 }

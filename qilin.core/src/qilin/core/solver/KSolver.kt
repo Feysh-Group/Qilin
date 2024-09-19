@@ -29,7 +29,6 @@ import qilin.core.builder.CallGraphBuilder
 import qilin.core.builder.ExceptionHandler
 import qilin.core.graph.NoBackEdgeDirectGraph
 import qilin.core.pag.*
-import qilin.core.sets.HybridPointsToSet
 import qilin.core.sets.P2SetVisitor
 import qilin.core.sets.PointsToSetInternal
 import qilin.util.PTAUtils
@@ -167,6 +166,9 @@ class KSolver(pta: PTA) : Propagator() {
         }
         println("PAG: $pag iterate count: $iterCnt")
         canStoreCache.clear()
+        if (!ValNode.UseRoaringPointsToSet) {
+            pag.valNodeNumberer.forEach { it.p2SetOrNull?.lessMem() }
+        }
     }
 
 
@@ -331,7 +333,7 @@ class KSolver(pta: PTA) : Propagator() {
         }
     }
 
-    private fun handleStoreAndLoadOnBase(newSet: HybridPointsToSet, base: VarNode) {
+    private fun handleStoreAndLoadOnBase(newSet: PointsToSetInternal, base: VarNode) {
         for (fr in base.allFieldRefs) {
             for (v in pag.storeInvLookup(fr)) {
                 handleStoreEdge(newSet, fr.field, v)
@@ -423,7 +425,7 @@ class KSolver(pta: PTA) : Propagator() {
     }
 
 
-    private fun propagateSimpleEdge(curr: ValNode, newSet: HybridPointsToSet) {
+    private fun propagateSimpleEdge(curr: ValNode, newSet: PointsToSetInternal) {
         for (next in pag.simpleLookup(curr)) {
             if (next == curr)
                 continue
@@ -466,7 +468,7 @@ class KSolver(pta: PTA) : Propagator() {
                 if (canStore) {
                     canStoreCacheBitSet.set(canStoreIndex)
                 }
-                canStoreCacheBitSet.set(existsIndex)
+                canStoreCacheBitSet.set(existsIndex) // 有竞争？
             } else {
                 canStore = canStoreCacheBitSet.get(canStoreIndex)
             }
@@ -486,21 +488,12 @@ class KSolver(pta: PTA) : Propagator() {
     }
 
 
-    protected fun propagatePTS(next: ValNode, newSet: HybridPointsToSet) {
-        val sz = newSet.size()
-        if (sz == 0) {
+    protected fun propagatePTS(next: ValNode, newSet: PointsToSetInternal) {
+        if (newSet.isEmpty()) {
             return
         }
         val dstType = next.type
         val canStoreCacheBitSet = canStoreCache.getOrPut(next.type) { SparseBitSet() }
-        if (sz <= 2) {
-            val allocNodeNumberer = pag.allocNodeNumberer
-            for (node in newSet.nodeIdxs) {
-                if (node == 0) break
-                propagatePTS(canStoreCacheBitSet, next, allocNodeNumberer.get(node.toLong()))
-            }
-            return
-        }
         val addTo = next.p2Set
         val p2SetVisitor: P2SetVisitor = object : P2SetVisitor(pta) {
             public override fun visit(node: Node) {

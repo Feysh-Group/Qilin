@@ -31,7 +31,7 @@ public abstract class PointsToSetInternal {
      */
     public abstract boolean forall(P2SetVisitor v);
 
-    public abstract boolean addAll(final PointsToSetInternal other, final PointsToSetInternal exclude);
+    public abstract void addAll(final PointsToSetInternal other, final PointsToSetInternal exclude);
 
     /**
      * Adds node index idx to this set, returns true if idx was not already in this set.
@@ -61,4 +61,6 @@ public abstract class PointsToSetInternal {
     }
 
     public abstract int size();
+
+    public abstract PointsToSetInternal lessMem();
 }
