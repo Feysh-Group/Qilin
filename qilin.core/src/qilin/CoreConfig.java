@@ -92,7 +92,7 @@ public class CoreConfig {
 
         public boolean printAliasInfo = true; // 性能消耗很高
 
-        public boolean castNeverFailsOfPhantomClass = true; // 类型不完整时候指针也可以传递
+        public boolean castNeverFailsOfPhantomClass = false; // 类型不完整时候指针也可以传递, 消耗高
     }
 
     public static class ApplicationConfiguration {
