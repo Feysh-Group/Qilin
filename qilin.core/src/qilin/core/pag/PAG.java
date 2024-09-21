@@ -36,11 +36,13 @@ import soot.jimple.internal.JArrayRef;
 import soot.jimple.internal.JAssignStmt;
 import soot.jimple.internal.JimpleLocal;
 import soot.jimple.spark.pag.SparkField;
-import soot.util.ArrayNumberer;
+import soot.util.*;
 
 import javax.annotation.Nullable;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -70,8 +72,8 @@ public class PAG {
     protected final ConcurrentHashMap<Object, AllocNode> valToAllocNode;
     protected final ConcurrentHashMap<Object, ValNode> valToValNode;
     protected final ConcurrentHashMap<SootMethod, MethodPAG> methodToPag;
-    protected final Set<SootField> globals;
-    protected final Set<Local> locals;
+    protected final INumbererSet<SootField> globals;
+    protected final INumbererSet<Local> locals;
     // ==========================outer objects==============================
     protected Queue<Pair<Node, Node>> edgeQueue;
 
@@ -106,8 +108,8 @@ public class PAG {
         this.valToAllocNode = DataFactory.createConcurrentMap(10000);
         this.valToValNode = DataFactory.createConcurrentMap(100000);
         this.methodToPag = DataFactory.createConcurrentMap();
-        this.globals = DataFactory.createSet(100000);
-        this.locals = DataFactory.createSet(100000);
+        this.globals = DataFactory.createAddThreadSafeBitSet(Scene.v().getFieldNumberer());
+        this.locals = DataFactory.createAddThreadSafeBitSet(Scene.v().getLocalNumberer());
     }
 
     public void setEdgeQueue(Queue<Pair<Node, Node>> edgeQueue) {
@@ -139,38 +141,38 @@ public class PAG {
     }
 
     // =======================add edge===============================
-    protected <K, V> boolean addToMap(Map<K, Set<V>> m, K key, V value) {
+    protected <K, V extends Numberable> boolean addToMap(Map<K, Set<V>> m, K key, V value, Numberer<? super V> valueNumberer) {
         Set<V> valueList = m.computeIfAbsent(key, k -> DataFactory.createConcurrentSet(4));
         return valueList.add(value);
     }
 
     private boolean addAllocEdge(AllocNode from, VarNode to) {
-        if (addToMap(alloc, from, to)) {
-            addToMap(allocInv, to, from);
+        if (addToMap(alloc, from, to, valNodeNumberer)) {
+            addToMap(allocInv, to, from, allocNodeNumberer);
             return true;
         }
         return false;
     }
 
     private boolean addSimpleEdge(ValNode from, ValNode to) {
-        if (addToMap(simple, from, to)) {
-            addToMap(simpleInv, to, from);
+        if (addToMap(simple, from, to, valNodeNumberer)) {
+            addToMap(simpleInv, to, from, valNodeNumberer);
             return true;
         }
         return false;
     }
 
     private boolean addStoreEdge(VarNode from, FieldRefNode to) {
-        if (addToMap(storeInv, to, from)) {
-            addToMap(store, from, to);
+        if (addToMap(storeInv, to, from, valNodeNumberer)) {
+            addToMap(store, from, to, fieldRefNodeNumberer);
             return true;
         }
         return false;
     }
 
     private boolean addLoadEdge(FieldRefNode from, VarNode to) {
-        if (addToMap(load, from, to)) {
-            addToMap(loadInv, to, from);
+        if (addToMap(load, from, to, valNodeNumberer)) {
+            addToMap(loadInv, to, from, fieldRefNodeNumberer);
             return true;
         }
         return false;
@@ -670,5 +672,87 @@ public class PAG {
     @Override
     public String toString() {
         return "simple: " + simple.size() + " load: " + load.size() + " store: " + store.size() + " alloc: " + alloc.size();
+    }
+
+    public <K extends Numberable, N extends Numberable, M extends Map<K, Set<N>>> CompletableFuture<M> lessMem(M map, Numberer<? super N> valueNumberer) {
+        return CompletableFuture.supplyAsync(() -> DataFactory.small(map, valueNumberer) );
+    }
+
+
+
+    public void small() {
+
+        // ========================= context-sensitive nodes =================================
+        contextVarNodeMap.replaceAll((k, v) -> DataFactory.small(v));
+        contextAllocNodeMap.replaceAll((k, v) -> DataFactory.small(v));
+        contextMethodMap.replaceAll((k, v) -> DataFactory.small(v));
+        addedContexts.replaceAll((k, v) -> DataFactory.small(v));
+        contextFieldMap.replaceAll((k, v) -> DataFactory.small(v));
+
+        // ==========================data=========================
+//        allocNodeNumberer.clear() ;
+//        valNodeNumberer.clear() ;
+//        fieldRefNodeNumberer.clear();
+//        maxFinishNumber.clear();
+
+        // ========================= ir to Node ==============================================
+//        valToAllocNode.clear();
+//        valToValNode.clear();
+        methodToPag.clear(); // ok
+        globals.clear(); // ok
+        locals.clear(); // ok
+
+        for (CompletableFuture future : new CompletableFuture[]{
+                lessMem(simple, valNodeNumberer),
+                lessMem(simpleInv, valNodeNumberer),
+                lessMem(load, valNodeNumberer),
+                lessMem(loadInv, fieldRefNodeNumberer),
+                lessMem(alloc, valNodeNumberer),
+                lessMem(allocInv, allocNodeNumberer),
+                lessMem(store, fieldRefNodeNumberer),
+                lessMem(storeInv, valNodeNumberer),
+        }) {
+            try {
+                future.get();
+            } catch (ExecutionException | InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+    }
+
+    public void resetAll() {
+
+        // ========================= context-sensitive nodes =================================
+        contextVarNodeMap.clear();
+        contextAllocNodeMap.clear();
+        contextMethodMap.clear();
+        addedContexts.clear();
+        contextFieldMap.clear();
+
+        // ==========================data=========================
+        allocNodeNumberer = new ArrayNumberer<>();
+        valNodeNumberer = new ArrayNumberer<>();
+        fieldRefNodeNumberer = new ArrayNumberer<>();
+        maxFinishNumber = new AtomicInteger(0);
+
+        edgeQueue.clear();
+
+        // ========================= ir to Node ==============================================
+        valToAllocNode.clear();
+        valToValNode.clear();
+        methodToPag.clear(); // ok
+        globals.clear(); // ok
+        locals.clear(); // ok
+
+
+        simple.clear();
+        simpleInv.clear();
+        load.clear();
+        loadInv.clear();
+        alloc.clear();
+        allocInv.clear();
+        store.clear();
+        storeInv.clear();
     }
 }

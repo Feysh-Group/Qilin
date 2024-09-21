@@ -19,7 +19,13 @@
 package qilin.util;
 
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+
+import org.roaringbitmap.RoaringBitmap;
+import soot.SootField;
+import soot.jimple.spark.pag.SparkField;
+import soot.util.*;
 
 public class DataFactory {
     public static <T> List<T> createList() {
@@ -62,5 +68,46 @@ public class DataFactory {
 
     public static <K, V> ConcurrentHashMap<K, V> createConcurrentMap() {
         return new ConcurrentHashMap<>();
+    }
+
+    public static <N extends Numberable> INumbererSet<N> createAddThreadSafeBitSet(Numberer<? super N> numberer) {
+        //noinspection unchecked
+        return new NumbererSet<>((Numberer<N>)numberer);
+    }
+
+    public static <N extends Numberable> INumbererSet<N> createLessMemBitSet(Numberer<? super N> numberer) {
+        //noinspection unchecked
+        return new RoaringNumbererSet<>(new RoaringBitmap(), (Numberer<N>)numberer);
+    }
+
+    public static <K, V> Map<K, V> small(Map<K, V> m) {
+        int sz = m.size();
+        if (sz == 1) {
+            Map.Entry<K, V> e = m.entrySet().iterator().next();
+            return Collections.singletonMap(e.getKey(), e.getValue());
+        } else if (sz == 0) {
+            return Collections.emptyMap();
+        } else {
+            return m;
+        }
+    }
+
+    public static <E> Set<E> small(Set<E> s) {
+        int sz = s.size();
+        if (sz == 1) {
+            E e = s.iterator().next();
+            return Collections.singleton(e);
+        } else if (sz == 0) {
+            return Collections.emptySet();
+        } else if (sz <= 16){
+            return new ArraySet<>(s);
+        } else {
+            return s;
+        }
+    }
+
+    public static <K extends Numberable, N extends Numberable, M extends Map<K, Set<N>>> M small(M map, Numberer<? super N> valueNumberer) {
+        map.replaceAll((k, v) -> DataFactory.createLessMemBitSet(valueNumberer));
+        return map;
     }
 }

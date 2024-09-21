@@ -35,7 +35,7 @@ public class PTAComparator {
     static final boolean verbose = true;
     public static int count, count2;
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws InterruptedException {
         List<String> list = new ArrayList<>();
         for (String arg : args) {
             if (!arg.startsWith("-pta=")) {
@@ -45,7 +45,7 @@ public class PTAComparator {
         runCompare(list.toArray(new String[0]), "2o", "E-2o");
     }
 
-    public static void runCompare(String[] args, String ptaPtn1, String ptaPtn2) {
+    public static void runCompare(String[] args, String ptaPtn1, String ptaPtn2) throws InterruptedException {
         Comparator comparator = new PTSComparator();
         String[] ptaArg1 = Util.concat(args, new String[]{"-pta=" + ptaPtn1});
         comparator.record(Main.run(ptaArg1));
