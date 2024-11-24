@@ -1,15 +1,21 @@
 build linux:
   stage: build
-  image: harbor.feysh.local/corax/gradle:v1
+  image:
+    name: harbor.corax.local/corax/builder/jdk17:v3
+  before_script:
+    - export GRADLE_USER_HOME=`pwd`/.gradle
   tags:
     - "k8s-runner"
   script:
-    - gradle build -x test
+    - ./gradlew build -x test "-PsemVer=$CI_COMMIT_REF_NAME"
 
 deploy:
-  image: harbor.feysh.local/corax/gradle:v1
+  image:
+    name: harbor.corax.local/corax/builder/jdk17:v3
+  before_script:
+    - export GRADLE_USER_HOME=`pwd`/.gradle
   tags:
     - "k8s-runner"
   script:
-    - gradle publish
+    - ./gradlew publish "-PsemVer=${CI_COMMIT_REF_NAME}-CORAX-FORK"
   when: manual
