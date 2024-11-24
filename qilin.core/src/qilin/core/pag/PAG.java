@@ -606,7 +606,7 @@ public class PAG {
     }
 
     private void handleArrayCopy(SootMethod method) {
-        Map<Unit, Collection<Unit>> newUnits = DataFactory.createMap();
+        Map<Unit, List<Unit>> newUnits = DataFactory.createMap();
         Body body = PTAUtils.getMethodBody(method);
         for (Unit unit : body.getUnits()) {
             Stmt s = (Stmt) unit;
@@ -624,7 +624,7 @@ public class PAG {
                         if (srcArr.getType() == objType) {
                             Local localSrc = new JimpleLocal("intermediate/" + body.getLocalCount(), ArrayType.v(objType, 1));
                             body.getLocals().add(localSrc);
-                            newUnits.computeIfAbsent(unit, k -> new HashSet<>()).add(new JAssignStmt(localSrc, srcArr));
+                            newUnits.computeIfAbsent(unit, k -> DataFactory.createList()).add(new JAssignStmt(localSrc, srcArr));
                             srcArr = localSrc;
                         }
                         Value dstArr = sie.getArg(2);
@@ -634,15 +634,15 @@ public class PAG {
                         if (dstArr.getType() == objType) {
                             Local localDst = new JimpleLocal("intermediate/" + body.getLocalCount(), ArrayType.v(objType, 1));
                             body.getLocals().add(localDst);
-                            newUnits.computeIfAbsent(unit, k -> new HashSet<>()).add(new JAssignStmt(localDst, dstArr));
+                            newUnits.computeIfAbsent(unit, k -> DataFactory.createList()).add(new JAssignStmt(localDst, dstArr));
                             dstArr = localDst;
                         }
                         Value src = new JArrayRef(srcArr, IntConstant.v(0));
                         Value dst = new JArrayRef(dstArr, IntConstant.v(0));
                         Local local = new JimpleLocal("nativeArrayCopy" + body.getLocalCount(), RefType.v("java.lang.Object"));
                         body.getLocals().add(local);
-                        newUnits.computeIfAbsent(unit, k -> DataFactory.createSet()).add(new JAssignStmt(local, src));
-                        newUnits.computeIfAbsent(unit, k -> DataFactory.createSet()).add(new JAssignStmt(dst, local));
+                        newUnits.computeIfAbsent(unit, k -> DataFactory.createList()).add(new JAssignStmt(local, src));
+                        newUnits.computeIfAbsent(unit, k -> DataFactory.createList()).add(new JAssignStmt(dst, local));
                     }
                 }
             }
