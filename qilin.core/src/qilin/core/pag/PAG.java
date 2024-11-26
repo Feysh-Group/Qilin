@@ -637,6 +637,9 @@ public class PAG {
                             newUnits.computeIfAbsent(unit, k -> DataFactory.createList()).add(new JAssignStmt(localDst, dstArr));
                             dstArr = localDst;
                         }
+                        if (!(srcArr instanceof JimpleLocal && dstArr instanceof JimpleLocal)) {
+                            continue;
+                        }
                         Value src = new JArrayRef(srcArr, IntConstant.v(0));
                         Value dst = new JArrayRef(dstArr, IntConstant.v(0));
                         Local local = new JimpleLocal("nativeArrayCopy" + body.getLocalCount(), RefType.v("java.lang.Object"));
