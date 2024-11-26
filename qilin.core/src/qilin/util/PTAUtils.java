@@ -585,8 +585,9 @@ public final class PTAUtils {
 
     public static boolean supportFinalize(AllocNode heap) {
         Type type = heap.getType();
-        if (type instanceof RefType refType && type != Scene.v().getObjectType()) {
-            SootMethod finalizeMethod = VirtualCalls.v().resolveNonSpecial(refType, sigFinalize.getValue(), apponly);
+        SootMethodRef finalize = sigFinalize.getValue();
+        if (type instanceof RefType refType && type != Scene.v().getObjectType() && finalize != null) {
+            SootMethod finalizeMethod = VirtualCalls.v().resolveNonSpecial(refType, finalize, apponly);
             if (finalizeMethod != null && finalizeMethod.toString().equals("<java.lang.Object: void finalize()>")) {
                 return false;
             }
